@@ -8,8 +8,6 @@ import wandb
 from torch.distributed import init_process_group, destroy_process_group
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-
-# Import your local modules
 from model import GPT, GPTConfig
 from util import DataLoaderLite, fmt_elapsed
 from hellaswag import get_hellaswag_acc
