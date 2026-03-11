@@ -1,6 +1,7 @@
 import torch
 from model import *
 from util import *
+from hellaswag import get_hellaswag_acc
 import time
 import math
 import argparse
@@ -75,6 +76,7 @@ if args.resume is not None:
     optimizer.load_state_dict(checkpoint['optimizer'])
     start_step = checkpoint['step'] + 1
 time_start = time.time()
+best_val_loss = float('inf')
 for step in range(start_step, max_steps):
     last_step = (step == max_steps - 1)
     t0 = time.time()
@@ -92,7 +94,17 @@ for step in range(start_step, max_steps):
                 loss = loss / val_loss_steps
                 val_loss_accum += loss.detach()
         print(f"validation loss {val_loss_accum.item():.4f}")
-        if step > 0 and (step % 5000 == 0 or last_step):
+        eval_limit = 1000 if last_step else 200
+        hw_acc = get_hellaswag_acc(model, device, limit=eval_limit)
+        print(f"hellaswag acc {hw_acc*100:.2f}%")
+        model.eval()
+        with torch.no_grad():
+            prompt = "Once upon a time, in a land far away,"
+            generated_text = model.generate(prompt, max_new_tokens=30)
+            print(f"--- generation at step {step} ---")
+            print(generated_text)
+            print("---------------------------------")
+        if step > 0:
             checkpoint = {
                 'model': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
@@ -100,8 +112,13 @@ for step in range(start_step, max_steps):
                 'step': step,
                 'val_loss': val_loss_accum.item()
             }
-            torch.save(checkpoint, f"model_{step:05d}.pt")
-            print(f"checkpoint saved to model_{step:05d}.pt")
+            if step % 5000 == 0 or last_step:
+                torch.save(checkpoint, f"model_{step:05d}.pt")
+                print(f"checkpoint saved to model_{step:05d}.pt")
+            if val_loss_accum.item() < best_val_loss:
+                best_val_loss = val_loss_accum.item()
+                torch.save(checkpoint, "model_best.pt")
+                print(f"new best validation loss! saved to model_best.pt")
     model.train()
     optimizer.zero_grad()
     loss_accum = 0.0
@@ -131,5 +148,7 @@ for step in range(start_step, max_steps):
     if args.wandb is not None:
         wandb.log({
             "loss": loss_accum.item(),
+            "val_loss": val_loss_accum.item() if (step != 0 and (step % 250 == 0 or last_step)) else None,
+            "hellaswag_acc": hw_acc if (step != 0 and (step % 250 == 0 or last_step)) else None
         }, step=step)
     print(f"step {step:4d} | loss: {loss_accum.item():.6f} | elapsed {time_elapsed} | dt {dt*1000:.2f}ms | tok/sec {tokens_per_sec:.2f}")
