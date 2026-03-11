@@ -13,6 +13,7 @@ parser.add_argument('-b', '--batch', type=int, default=524288)
 parser.add_argument('-m', '--micro', type=int, default=64)
 parser.add_argument('-s', '--sequence', type=int, default=1024)
 parser.add_argument('-w', '--wandb', default=None)
+parser.add_argument('-c', '--cache', default="data_cache")
 args = parser.parse_args()
 
 if args.wandb is not None:
@@ -38,8 +39,8 @@ grad_accum_steps = total_batch_size // (B * T)
 print(f"total desired batch size {total_batch_size}")
 print(f"=> calculated gradient accumulation steps {grad_accum_steps}")
 
-train_loader = DataLoaderLite(B=B, T=T, split="train")
-val_loader = DataLoaderLite(B=B, T=T, split="val")
+train_loader = DataLoaderLite(B=B, T=T, split="train", data_root=args.cache)
+val_loader = DataLoaderLite(B=B, T=T, split="val", data_root=args.cache)
 
 torch.set_float32_matmul_precision('high')
 
@@ -68,7 +69,7 @@ time_start = time.time()
 for step in range(max_steps):
     last_step = (step == max_steps - 1)
     t0 = time.time()
-    if step % 250 == 0 or last_step:
+    if step != 0 and (step % 250 == 0 or last_step):
         model.eval()
         val_loader.reset()
         with torch.no_grad():
@@ -85,6 +86,7 @@ for step in range(max_steps):
         if step > 0 and (step % 5000 == 0 or last_step):
             checkpoint = {
                 'model': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
                 'config': model.config,
                 'step': step,
                 'val_loss': val_loss_accum.item()

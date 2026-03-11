@@ -1,6 +1,7 @@
 import torch
 import os
 import numpy as np
+import random
 
 def fmt_elapsed(seconds):
     if seconds < 60:
@@ -19,11 +20,11 @@ def load_tokens(filename):
     return ptt
 
 class DataLoaderLite:
-    def __init__(self, B, T, split):
+    def __init__(self, B, T, split, data_root="data_cache"):
         self.B = B
         self.T = T
         assert split in {'train', 'val'}
-        data_root = "data_cache"
+        self.data_root = data_root
         shards = os.listdir(data_root)
         shards = [s for s in shards if split in s]
         shards = sorted(shards)
@@ -34,6 +35,7 @@ class DataLoaderLite:
         self.reset()
     
     def reset(self):
+        random.shuffle(self.shards)
         self.current_shard = 0
         self.tokens = load_tokens(self.shards[self.current_shard])
         self.current_position = self.B * self.T

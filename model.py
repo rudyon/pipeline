@@ -117,7 +117,7 @@ class GPT(nn.Module):
         self.eval()
         with torch.no_grad():
             while x.size(1) < len(tokens) + max_new_tokens:
-                logits = self(x)
+                logits, _ = self(x)
                 logits = logits[:, -1, :]
                 probs = F.softmax(logits, dim=-1)
                 topk_probs, topk_indices = torch.topk(probs, top_k, dim=-1)

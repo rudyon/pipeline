@@ -12,7 +12,7 @@ parser.add_argument('-c', '--column', default="text")
 parser.add_argument('-C', '--config', default="default")
 parser.add_argument('-s', '--shard-size', type=int, default=100000000)
 parser.add_argument('-m', '--max-shards', type=int, default=None)
-parser.add_argument('-ca' '--cache', default="data_cache")
+parser.add_argument('--cache', default="data_cache")
 args = parser.parse_args()
 
 hf_dataset = args.dataset

@@ -15,4 +15,4 @@ if [ ! "$(ls -A data_cache 2>/dev/null)" ]; then
 fi
 
 # actually begin training
-python train.py 19073 # ~1 epoch, if data is 10B tokens and batch size is 0.5M tokens
+python train.py 19073 -w $1 # ~1 epoch, if data is 10B tokens and batch size is 0.5M tokens

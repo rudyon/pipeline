@@ -11,8 +11,8 @@ source .venv/bin/activate
 
 # download data and tokenize it if not already downloaded
 if [ ! "$(ls -A test_cache 2>/dev/null)" ]; then
-    python prepare_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT -m 2 -ca test_cache
+    python prepare_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT -m 2 --cache test_cache
 fi
 
 # actually begin training
-python train.py 50 -d 1 -b 1024 -m 1 -s 256
+python train.py 50 -d 1 -b 1024 -m 1 -s 256 --cache test_cache
