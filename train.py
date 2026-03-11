@@ -19,7 +19,7 @@ parser.add_argument('-r', '--resume', default=None)
 args = parser.parse_args()
 
 if args.wandb is not None:
-    wandb.init(project="build-nanogpt", name=args.wandb)
+    wandb.init(project="pipeline", name=args.wandb)
 
 device = 'cpu'
 if torch.cuda.is_available():
