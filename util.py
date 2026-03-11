@@ -20,34 +20,33 @@ def load_tokens(filename):
     return ptt
 
 class DataLoaderLite:
-    def __init__(self, B, T, split, data_root="data_cache"):
+    def __init__(self, B, T, process_rank, num_processes, split, data_root="data_cache"):
         self.B = B
         self.T = T
-        assert split in {'train', 'val'}
-        self.data_root = data_root
+        self.process_rank = process_rank
+        self.num_processes = num_processes
         shards = os.listdir(data_root)
-        shards = [s for s in shards if split in s]
-        shards = sorted(shards)
-        shards = [os.path.join(data_root, s) for s in shards]
+        shards = [os.path.join(data_root, s) for s in shards if split in s]
+        shards.sort() # mandatory for ddp
         self.shards = shards
-        assert len(shards) > 0, f"no shards found for split {split}"
-        print(f"found {len(shards)} shards for split {split}")
         self.reset()
-    
+
     def reset(self):
-        random.shuffle(self.shards)
         self.current_shard = 0
         self.tokens = load_tokens(self.shards[self.current_shard])
-        self.current_position = self.B * self.T
+        # start at a unique offset for this specific GPU
+        self.current_position = self.B * self.T * self.process_rank
 
     def next_batch(self):
         B, T = self.B, self.T
         buf = self.tokens[self.current_position : self.current_position+B*T+1]
         x = (buf[:-1]).view(B, T)
         y = (buf[1:]).view(B, T)
-        self.current_position += B*T
-        if self.current_position + (B*T+1) > len(self.tokens):
+        # advance by the total number of tokens processed by the whole GPU world
+        self.current_position += B * T * self.num_processes
+        # check if this GPU's next leap goes out of bounds
+        if self.current_position + (B * T * self.num_processes + 1) > len(self.tokens):
             self.current_shard = (self.current_shard + 1) % len(self.shards)
             self.tokens = load_tokens(self.shards[self.current_shard])
-            self.current_position = 0
+            self.current_position = B * T * self.process_rank
         return x, y

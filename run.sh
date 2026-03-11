@@ -17,4 +17,4 @@ fi
 # do the actual training run
 # 19073 steps about equals 1 epoch, if data is 10B tokens and batch size is 0.5M tokens
 # micro batch size is set to 8 to be able to run on a single 3090 without OOM
-python train.py 4748 -w $1 -m 8
+torchrun --standalone --nproc_per_node=$1 train.py 4748 --batch 524288 -w $2 -m 8

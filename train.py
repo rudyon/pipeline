@@ -6,6 +6,8 @@ import time
 import math
 import argparse
 import wandb
+from torch.distributed import init_process_group, destroy_process_group
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 parser = argparse.ArgumentParser()
 parser.add_argument('steps', type=int)
@@ -21,12 +23,29 @@ args = parser.parse_args()
 if args.wandb is not None:
     wandb.init(project="pipeline", name=args.wandb)
 
-device = 'cpu'
-if torch.cuda.is_available():
-    device = 'cuda'
-elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-    device = 'mps'
-print(f"Using device: {device}")
+ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
+if ddp:
+    assert torch.cuda.is_available(), "you need cuda for ddp"
+    init_process_group(backend='nccl')
+    ddp_rank = int(os.environ['RANK'])
+    ddp_local_rank = int(os.environ['LOCAL_RANK'])
+    ddp_world_size = int(os.environ['WORLD_SIZE'])
+    device = f'cuda:{ddp_local_rank}'
+    torch.cuda.set_device(device)
+    master_process = ddp_rank == 0 # only do logging/checkpoints on rank 0
+    print(f"using DistributedDataParallel")
+else:
+    # fallback to single process
+    ddp_rank = 0
+    ddp_local_rank = 0
+    ddp_world_size = 1
+    master_process = True
+    device = 'cpu'
+    if torch.cuda.is_available():
+        device = 'cuda'
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        device = 'mps'
+    print(f"using device: {device}")
 
 autocast_device = device if device in ('cuda', 'mps') else 'cpu'
 use_autocast = device != 'cpu'
@@ -36,10 +55,14 @@ device_type = "cuda" if device.startswith("cuda") else "cpu"
 total_batch_size = args.batch # in number of tokens
 B = args.micro # micro batch size
 T = args.sequence # sequence length
-assert total_batch_size % (B * T) == 0, "make sure total batch size is divisible by B * T"
-grad_accum_steps = total_batch_size // (B * T)
-print(f"total desired batch size {total_batch_size}")
-print(f"=> calculated gradient accumulation steps {grad_accum_steps}")
+assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total batch size is divisible by B * T * ddp_world_size"
+grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
+if master_process and ddp:
+    print(f"total desired batch size {total_batch_size}")
+    print(f"=> calculated gradient accumulation steps {grad_accum_steps} (per GPU)")
+else:
+    print(f"total desired batch size {total_batch_size}")
+    print(f"=> calculated gradient accumulation steps {grad_accum_steps}")
 
 train_loader = DataLoaderLite(B=B, T=T, split="train", data_root=args.cache)
 val_loader = DataLoaderLite(B=B, T=T, split="val", data_root=args.cache)
@@ -51,6 +74,12 @@ model.to(device)
 
 if device != 'cpu':
     model = torch.compile(model)
+
+if ddp:
+    model = DDP(model, device_ids=[ddp_local_rank])
+
+# access the raw model for custom methods (like generate) or saving
+raw_model = model.module if ddp else model
 
 max_lr = 0.0006
 min_lr = max_lr * 0.1
@@ -123,6 +152,8 @@ for step in range(start_step, max_steps):
     optimizer.zero_grad()
     loss_accum = 0.0
     for micro_step in range(grad_accum_steps):
+        if ddp:
+            model.require_backward_grad_sync = (micro_step == grad_accum_steps - 1)
         x, y = train_loader.next_batch()
         x, y = x.to(device), y.to(device)
         if use_autocast:
