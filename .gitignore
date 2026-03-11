@@ -1,0 +1,7 @@
+train.bin
+val.bin
+.venv
+__pycache__
+data_cache
+test_cache
+wandb
