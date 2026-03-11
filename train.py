@@ -70,7 +70,7 @@ optimizer = model.configure_optimizers(weight_decay=0.1, learning_rate=0.0006, d
 start_step = 0
 if args.resume is not None:
     print(f"resuming from checkpoint {args.resume}")
-    checkpoint = torch.load(args.resume, map_location=device)
+    checkpoint = torch.load(args.resume, map_location=device, weights_only=False)
     model.load_state_dict(checkpoint['model'])
     optimizer.load_state_dict(checkpoint['optimizer'])
     start_step = checkpoint['step'] + 1
