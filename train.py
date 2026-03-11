@@ -10,10 +10,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument('steps', type=int)
 parser.add_argument('-d', '--depth', type=int, default=12)
 parser.add_argument('-b', '--batch', type=int, default=524288)
-parser.add_argument('-m', '--micro', type=int, default=64)
+parser.add_argument('-m', '--micro', type=int, default=16)
 parser.add_argument('-s', '--sequence', type=int, default=1024)
 parser.add_argument('-w', '--wandb', default=None)
 parser.add_argument('-c', '--cache', default="data_cache")
+parser.add_argument('-r', '--resume', default=None)
 args = parser.parse_args()
 
 if args.wandb is not None:
@@ -65,8 +66,16 @@ def get_lr(it):
     return min_lr + coeff * (max_lr - min_lr)
 
 optimizer = model.configure_optimizers(weight_decay=0.1, learning_rate=0.0006, device=device)
+
+start_step = 0
+if args.resume is not None:
+    print(f"resuming from checkpoint {args.resume}")
+    checkpoint = torch.load(args.resume, map_location=device)
+    model.load_state_dict(checkpoint['model'])
+    optimizer.load_state_dict(checkpoint['optimizer'])
+    start_step = checkpoint['step'] + 1
 time_start = time.time()
-for step in range(max_steps):
+for step in range(start_step, max_steps):
     last_step = (step == max_steps - 1)
     t0 = time.time()
     if step != 0 and (step % 250 == 0 or last_step):

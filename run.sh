@@ -14,5 +14,7 @@ if [ ! "$(ls -A data_cache 2>/dev/null)" ]; then
     python prepare_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT
 fi
 
-# actually begin training
-python train.py 19073 -w $1 # ~1 epoch, if data is 10B tokens and batch size is 0.5M tokens
+# do the actual training run
+# 19073 steps about equals 1 epoch, if data is 10B tokens and batch size is 0.5M tokens
+# micro batch size is set to 8 to be able to run on a single 3090 without OOM
+python train.py 19073 -w $1 -m 8
