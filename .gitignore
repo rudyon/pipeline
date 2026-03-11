@@ -5,3 +5,4 @@ __pycache__
 data_cache
 test_cache
 wandb
+model_*.pt
