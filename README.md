@@ -1,7 +1,11 @@
 # pipeline
 
-This repo was created as a follow along to [Andrej Karpathy](https://github.com/karpathy)'s [Let's Reproduce GPT-2 video](https://www.youtube.com/watch?v=l8pRSuU81PU). I am kind of trying to turn it into a proper and robust training pipeline.
+An LLM training pipeline. I am kind of trying to turn it into a proper and robust training pipeline.
 
-## first-run
+## model
 
-The initial run was started on March 12th. It is currently ongoing. For updates on the training run you can follow my [Twitter](https://twitter.com/rxdyxn).
+You can see the model I have used this repo to train [here](https://huggingface.co/rudyon/rudygpt).
+
+### note
+
+This repo was initially created as a follow along to [Andrej Karpathy](https://github.com/karpathy)'s [Let's Reproduce GPT-2 video](https://www.youtube.com/watch?v=l8pRSuU81PU).
