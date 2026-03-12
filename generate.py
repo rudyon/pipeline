@@ -17,4 +17,4 @@ model = GPT(GPTConfig(depth=args.depth, vocab_size=50304))
 model = model.load_state_dict(checkpoint['model'])
 
 model.eval()
-print(f"Model generated: {model.generate("Hello, how are you?", max_new_tokens=20)}")
+print(model.generate("Hello, how are you?", max_new_tokens=20))
