@@ -4,4 +4,4 @@ This repo was created as a follow along to [Andrej Karpathy](https://github.com/
 
 ## first-run
 
-The initial run was started on March 12th. It is currently ongoing.
+The initial run was started on March 12th. It is currently ongoing. For updates on the training run you can follow my [Twitter](https://twitter.com/rxdyxn).
