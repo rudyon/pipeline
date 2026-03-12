@@ -11,7 +11,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 checkpoint = torch.load(args.checkpoint, map_location=device)
 model = GPT(GPTConfig(depth=args.depth, vocab_size=50304))
-model.load_state_dict(checkpoint['model'])
+model.load_state_dict(checkpoint['_orig_mod.model'])
 model.to(device)
 model.eval()
 
