@@ -118,6 +118,8 @@ for step in range(start_step, max_steps):
         if master_process:
             hw_acc = get_hellaswag_acc(raw_model, device, limit=1000 if last_step else 200)
             print(f"step {step} | val loss {val_loss_accum.item():.4f} | hellaswag {hw_acc*100:.2f}%")
+            if args.wandb:
+                wandb.log({"val/loss": val_loss_accum.item(), "hellaswag": hw_acc*100}, step=step)
             
             checkpoint = {
                 'model': raw_model.state_dict(),
@@ -160,7 +162,7 @@ for step in range(start_step, max_steps):
         tokens_per_sec = total_batch_size / dt
         print(f"step {step:4d} | loss: {loss_accum.item():.6f} | dt {dt*1000:.2f}ms | tok/sec {tokens_per_sec:.2f}")
         if args.wandb:
-            wandb.log({"loss": loss_accum.item(), "lr": lr}, step=step)
+            wandb.log({"train/loss": loss_accum.item(), "lr": lr}, step=step)
 
 if ddp:
     destroy_process_group()
