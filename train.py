@@ -167,9 +167,8 @@ for step in range(start_step, max_steps):
         
     norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     lr = get_lr(step)
-    for opt in optimizer:
-        for param_group in opt.param_groups:
-            param_group['lr'] = lr
+    optimizer[0].param_groups[0]['lr'] = lr * 10
+    optimizer[1].param_groups[0]['lr'] = lr
 
     for opt in optimizer:
         opt.step()
