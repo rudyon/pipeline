@@ -8,3 +8,4 @@
 {"id": 7, "name": "noweighttying", "val_loss": 6.903012275695801, "kept": false}
 {"id": 8, "name": "convattention", "val_loss": 6.50774621963501, "kept": true}
 {"id": 9, "name": "convmlp", "val_loss": 6.597817897796631, "kept": false}
+{"id": 10, "name": "moe", "val_loss": 6.532217025756836, "kept": false}

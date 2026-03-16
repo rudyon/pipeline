@@ -5,25 +5,6 @@ import torch.nn.functional as F
 import tiktoken
 import inspect
 
-class MoE(nn.Module):
-    def __init__(self, config, num_experts=4):
-        super().__init__()
-        self.router = nn.Linear(config.n_embd, num_experts, bias=False)
-        self.experts = nn.ModuleList([MLP(config) for _ in range(num_experts)])
-
-    def forward(self, x):
-        B, T, C = x.size()
-        logits = self.router(x)
-        probs = F.softmax(logits, dim=-1)
-        expert_idx = torch.argmax(probs, dim=-1)
-        final_output = torch.zeros_like(x)
-        for i, expert in enumerate(self.experts):
-            mask = (expert_idx == i)
-            if mask.any():
-                res = expert(x[mask]).to(x.dtype)
-                final_output[mask] = res
-        return final_output
-
 def apply_rotary_pos_emb(q, k, cos, sin):
     cos = cos.unsqueeze(0).unsqueeze(2)
     sin = sin.unsqueeze(0).unsqueeze(2)
@@ -114,11 +95,11 @@ class Block(nn.Module):
         self.ln_1 = nn.LayerNorm(config.n_embd)
         self.attn = CausalSelfAttention(config)
         self.ln_2 = nn.LayerNorm(config.n_embd)
-        self.moe = MoE(config, num_experts=4)
+        self.mlp = MLP(config)
 
     def forward(self, x):
         x = x + self.attn(self.ln_1(x))
-        x = x + self.moe(self.ln_2(x))
+        x = x + self.mlp(self.ln_2(x))
         return x
 
 @dataclass
