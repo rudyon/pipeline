@@ -1,9 +1,6 @@
 #!/bin/bash
 # this is designed to run on Kaggle
-command -v uv &> /dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
-[ -d ".venv" ] || uv venv
-uv pip install -r requirements.txt || pip install -r requirements.txt -q
-source .venv/bin/activate 2>/dev/null || true
+pip install -r requirements.txt -q
 NUM_GPUS=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
 NUM_GPUS=${NUM_GPUS:-1}
 if [ ! "$(ls -A test_cache 2>/dev/null)" ]; then
