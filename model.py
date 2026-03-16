@@ -111,7 +111,7 @@ class LLMConfig:
     @property
     def n_layer(self): return self.depth
     @property
-    def n_head(self): return self.depth / 2
+    def n_head(self): return int(self.depth / 2)
     @property
     def n_embd(self): return self.depth * 128
 
