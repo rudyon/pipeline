@@ -83,11 +83,15 @@ optimizer = raw_model.configure_optimizers(weight_decay=0.1, learning_rate=0.000
 # Learning rate schedule
 max_lr, min_lr = 0.001, 0.00006
 warmup_steps, max_steps = 715, args.steps
+stable_ratio = 0.8
 def get_lr(it):
-    if it < warmup_steps: return max_lr * (it+1) / warmup_steps
-    if it > max_steps: return min_lr
-    decay_ratio = (it - warmup_steps) / (max_steps - warmup_steps)
-    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))
+    if it < warmup_steps:
+        return max_lr * (it + 1) / warmup_steps
+    if it < max_steps * stable_ratio:
+        return max_lr
+    decay_steps = max_steps - (max_steps * stable_ratio)
+    it_in_decay = it - (max_steps * stable_ratio)
+    coeff = 0.5 * (1.0 + math.cos(math.pi * it_in_decay / decay_steps))
     return min_lr + coeff * (max_lr - min_lr)
 
 start_step = 0
@@ -180,7 +184,7 @@ for step in range(start_step, max_steps):
     if master_process:
         dt = time.time() - t0
         tokens_per_sec = total_batch_size / dt
-        print(f"step {step:4d} | loss: {loss_accum.item():.6f} | dt {dt*1000:.2f}ms | tok/sec {tokens_per_sec:.2f} | elapsed {fmt_elapsed((time.time() - time_start))}")
+        print(f"step {step:4d} | loss: {loss_accum.item():.6f} | lr {lr} |  dt {dt*1000:.2f}ms | tok/sec {tokens_per_sec:.2f} | elapsed {fmt_elapsed((time.time() - time_start))}")
         if args.wandb:
             wandb.log({"train loss": loss_accum.item(), "lr": lr}, step=step)
 
