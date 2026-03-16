@@ -5,6 +5,26 @@ import torch.nn.functional as F
 import tiktoken
 import inspect
 
+class MobileConv(nn.Module):
+    def __init__(self, dim, expansion_factor=4):
+        super().__init__()
+        inner_dim = dim * expansion_factor
+        self.expand = nn.Linear(dim, inner_dim, bias=False)
+        self.conv = nn.Conv1d(inner_dim, inner_dim, kernel_size=3, groups=inner_dim, bias=False)
+        self.proj = nn.Linear(inner_dim, dim, bias=False)
+        self.nonlin = nn.SiLU
+
+    def forward(self, x):
+        identity = x
+        x = self.expand(x)
+        x = self.nonlin(x)
+        x = x.transpose(1, 2)
+        x = F.pad(x, (2, 0))
+        x = self.conv(x)
+        x = x.transpose(1, 2)
+        x = self.proj(x) 
+        return x + identity 
+
 def apply_rotary_pos_emb(q, k, cos, sin):
     cos = cos.unsqueeze(0).unsqueeze(2)
     sin = sin.unsqueeze(0).unsqueeze(2)
@@ -46,7 +66,7 @@ class CausalSelfAttention(nn.Module):
         super().__init__()
         assert config.n_embd % config.n_head == 0
         self.kernel_size = 3
-        self.l_conv = nn.Conv1d(config.n_embd, config.n_embd, kernel_size=self.kernel_size, groups=config.n_embd, bias=False)
+        self.l_conv = MobileConv(config.n_embd, 4)
         self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=False)
         self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=False)
         self.c_proj.GPT_SCALE_INIT = 1
@@ -58,10 +78,7 @@ class CausalSelfAttention(nn.Module):
 
     def forward(self, x):
         B, T, C = x.size()
-        x = x.transpose(1, 2)
-        x = F.pad(x, (self.kernel_size - 1, 0))
         x = self.l_conv(x)
-        x = x.transpose(1, 2)
         qkv = self.c_attn(x)
         q, k, v = qkv.split(self.n_embd, dim=2)
         k = k.view(B, T, self.n_head, self.head_dim)
