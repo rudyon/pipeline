@@ -1,1 +1,2 @@
 {"id": 0, "name": "baseline", "val_loss": 6.894501686096191, "kept": true}
+{"id": 1, "name": "rmsnorm", "val_loss": 6.903061866760254, "kept": false}
