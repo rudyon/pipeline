@@ -16,12 +16,12 @@ else:
     losses = [e["val_loss"] for e in experiments]
     kept = [e for e in experiments if e["kept"]]
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.scatter(ids, losses, color="gray", alpha=0.3, label="Discarded", s=20) 
+    ax.scatter(ids, losses, color="gray", alpha=0.3, label="Discarded", s=10) 
     if kept:
         kept_ids = [e["id"] for e in kept]
         kept_losses = [e["val_loss"] for e in kept]
-        ax.step(kept_ids, kept_losses, color="green", where='post', alpha=0.5, zorder=1)
-        ax.scatter(kept_ids, kept_losses, color="green", label="Kept", s=40, zorder=2)
+        ax.scatter(kept_ids, kept_losses, color="lime", edgecolors="black", label="Kept", s=20, zorder=2)
+        ax.step(kept_ids, kept_losses, color="green", where='post', alpha=0.5, zorder=1, label="Running best")
         for e in kept:
             ax.annotate(e["name"], (e["id"], e["val_loss"]), 
                         textcoords="offset points", xytext=(0, 5),
