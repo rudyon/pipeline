@@ -25,6 +25,10 @@ parser.add_argument('-r', '--resume', default=None)
 parser.add_argument('-e', '--experiment', default=None)
 args = parser.parse_args()
 
+# manual seed for experimentation only!
+if args.experiment is not None:
+    torch.manual_seed(42)
+
 # Setup DDP
 ddp = int(os.environ.get('RANK', -1)) != -1 
 if ddp:
