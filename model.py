@@ -45,7 +45,8 @@ class CausalSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         assert config.n_embd % config.n_head == 0
-        self.l_conv = nn.Conv1d(config.n_embd, config.n_embd, kernel_size=3, padding=1, groups=config.n_embd, bias=False)
+        self.kernel_size = 3
+        self.l_conv = nn.Conv1d(config.n_embd, config.n_embd, kernel_size=self.kernel_size, groups=config.n_embd, bias=False)
         self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=False)
         self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=False)
         self.c_proj.GPT_SCALE_INIT = 1
@@ -57,9 +58,10 @@ class CausalSelfAttention(nn.Module):
 
     def forward(self, x):
         B, T, C = x.size()
-        x_conv = x.transpose(1, 2)
-        x_conv = self.l_conv(x_conv)
-        x = x_conv.transpose(1, 2)
+        x = x.transpose(1, 2)
+        x = F.pad(x, (self.kernel_size - 1, 0))
+        x = self.l_conv(x)
+        x = x.transpose(1, 2)
         qkv = self.c_attn(x)
         q, k, v = qkv.split(self.n_embd, dim=2)
         k = k.view(B, T, self.n_head, self.head_dim)
