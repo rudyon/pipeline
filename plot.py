@@ -26,7 +26,7 @@ else:
             ax.annotate(e["name"], (e["id"], e["val_loss"]), 
                         textcoords="offset points", xytext=(0, 5),
                         fontsize=8, rotation=45, ha='left', 
-                        color="green", fontweight='semibold')
+                        color="green", fontweight='normal')
             
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.set_xlabel("Experiment #")
