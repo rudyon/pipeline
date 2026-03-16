@@ -2,4 +2,5 @@
 {"id": 1, "name": "rmsnorm", "val_loss": 6.903061866760254, "kept": false}
 {"id": 2, "name": "nogptweightinits", "val_loss": 7.681303977966309, "kept": false}
 {"id": 3, "name": "swiglu", "val_loss": 6.891933441162109, "kept": true}
-{"id": 4, "name": "rope", "val_loss": 6.818004608154297, "kept": true}
+{"id": 4, "name": "noposembd", "val_loss": 6.818004608154297, "kept": true}
+{"id": 5, "name": "ropenobias", "val_loss": 6.780716896057129, "kept": true}

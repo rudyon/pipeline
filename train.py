@@ -81,7 +81,7 @@ raw_model = model.module if ddp else model
 optimizer = raw_model.configure_optimizers(weight_decay=0.1, learning_rate=0.0006, device=device)
 
 # Learning rate schedule
-max_lr, min_lr = 0.0006, 0.00006
+max_lr, min_lr = 0.001, 0.00006
 warmup_steps, max_steps = 715, args.steps
 def get_lr(it):
     if it < warmup_steps: return max_lr * (it+1) / warmup_steps
