@@ -173,14 +173,6 @@ class LLM(nn.Module):
         muon_params = [p for n, p in param_dict.items() if p.ndim == 2 and "wte" not in n and "lm_head" not in n]
         muon_set = set(muon_params)
         adamw_params = [p for p in param_dict.values() if p not in muon_set]
-        decay_params = [p for p in adamw_params if p.ndim >= 2]
-        nodecay_params = [p for p in adamw_params if p.ndim < 2]
-        adamw_groups = [
-            {'params': decay_params, 'weight_decay': weight_decay},
-            {'params': nodecay_params, 'weight_decay': 0.0}
-        ]
-        opt1 = torch.optim.Muon(muon_params, lr=learning_rate, momentum=0.95)
-        opt2 = torch.optim.AdamW(adamw_groups, lr=learning_rate, betas=(0.9, 0.95), eps=1e-8, fused=('cuda' in device))
-        print(f"Muon updating {len(muon_params)} tensors")
-        print(f"AdamW updating {len(adamw_params)} tensors")
+        opt1 = torch.optim.Muon(muon_params, lr=learning_rate * 10, momentum=0.95)
+        opt2 = torch.optim.AdamW(adamw_params, lr=learning_rate, weight_decay=weight_decay, fused=('cuda' in device))
         return [opt1, opt2]

@@ -170,6 +170,9 @@ for step in range(start_step, max_steps):
     for opt in optimizer:
         for param_group in opt.param_groups:
             param_group['lr'] = lr
+
+    for opt in optimizer:
+        opt.step()
     
     if device_type == 'cuda': torch.cuda.synchronize()
     
