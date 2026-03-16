@@ -62,6 +62,7 @@ class CausalSelfAttention(nn.Module):
         q = q.view(B, T, self.n_head, self.head_dim)
         v = v.view(B, T, self.n_head, self.head_dim)
         cos, sin = self.rotary_emb(T, device=x.device)
+        q, k = apply_rotary_pos_emb(q, k, cos, sin)
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
