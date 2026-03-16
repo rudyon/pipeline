@@ -22,6 +22,10 @@ else:
         kept_losses = [e["val_loss"] for e in kept]
         plt.scatter(kept_ids, kept_losses, color="green", label="Kept")
         plt.plot(kept_ids, kept_losses, color="green")
+    for e in experiments:
+        plt.annotate(e["name"], (e["id"], e["val_loss"]), 
+                    textcoords="offset points", xytext=(0, 8),
+                    fontsize=8, rotation=45, ha='left')
     plt.xlabel("Experiment #")
     plt.ylabel("Val Loss")
     plt.title(f"Experiments: {len(experiments)} total")
