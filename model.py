@@ -12,7 +12,7 @@ class MobileConv(nn.Module):
         self.expand = nn.Linear(dim, inner_dim, bias=False)
         self.conv = nn.Conv1d(inner_dim, inner_dim, kernel_size=3, groups=inner_dim, bias=False)
         self.proj = nn.Linear(inner_dim, dim, bias=False)
-        self.nonlin = nn.SiLU
+        self.nonlin = nn.SiLU()
 
     def forward(self, x):
         identity = x
