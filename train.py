@@ -160,9 +160,10 @@ for step in range(start_step, max_steps):
     if master_process:
         dt = time.time() - t0
         tokens_per_sec = total_batch_size / dt
-        print(f"step {step:4d} | loss: {loss_accum.item():.6f} | dt {dt*1000:.2f}ms | tok/sec {tokens_per_sec:.2f}")
+        print(f"step {step:4d} | loss: {loss_accum.item():.6f} | dt {dt*1000:.2f}ms | tok/sec {tokens_per_sec:.2f} | elapsed {fmt_elapsed((time.time() - time_start))}")
         if args.wandb:
             wandb.log({"train loss": loss_accum.item(), "lr": lr}, step=step)
+print(f"training took {fmt_elapsed((time.time() - time_start))}")
 
 if ddp:
     destroy_process_group()
