@@ -11,6 +11,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from model import GPT, GPTConfig
 from util import DataLoaderLite, fmt_elapsed
 from hellaswag import get_hellaswag_acc
+import json
 
 parser = argparse.ArgumentParser()
 parser.add_argument('steps', type=int)
@@ -21,6 +22,7 @@ parser.add_argument('-s', '--sequence', type=int, default=1024)
 parser.add_argument('-w', '--wandb', default=None)
 parser.add_argument('-c', '--cache', default="data_cache")
 parser.add_argument('-r', '--resume', default=None)
+parser.add_argument('-e', '--experiment', default=None)
 args = parser.parse_args()
 
 # Setup DDP
@@ -164,6 +166,17 @@ for step in range(start_step, max_steps):
         if args.wandb:
             wandb.log({"train loss": loss_accum.item(), "lr": lr}, step=step)
 print(f"training took {fmt_elapsed((time.time() - time_start))}")
+if args.experiment:
+    result = {
+        "id": len(open("experiments.jsonl").readlines()) if os.path.exists("experiments.jsonl") else 0,
+        "name": args.experiment,
+        "val_loss": val_loss_accum.item(),
+        "kept": None  # filled in manually later
+    }
+    with open("experiments.jsonl", "a") as f:
+        f.write(json.dumps(result) + "\n")
+    print(f"logged experiment '{args.experiment}' with val loss {val_loss_accum.item():.4f}")
+
 
 if ddp:
     destroy_process_group()
