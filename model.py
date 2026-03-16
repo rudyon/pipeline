@@ -5,6 +5,31 @@ import torch.nn.functional as F
 import tiktoken
 import inspect
 
+def apply_rotary_pos_emb(q, k, cos, sin):
+    cos = cos.unsqueeze(0).unsqueeze(2)
+    sin = sin.unsqueeze(0).unsqueeze(2)
+    
+    def rotate_half(x):
+        x1, x2 = x[..., :x.shape[-1] // 2], x[..., x.shape[-1] // 2:]
+        return torch.cat((-x2, x1), dim=-1)
+        
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+class RotaryEmbedding(nn.Module):
+    def __init__(self, dim, max_seq_len=8192, base=10000.0):
+        super().__init__()
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer("inv_freq", inv_freq)
+        self.max_seq_len = max_seq_len
+
+    def forward(self, seq_len, device):
+        t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos(), emb.sin()
+
 class SwiGLU(nn.Module):
     def __init__(self, input_dim, output_dim, beta=1.0):
         super().__init__()
@@ -25,15 +50,21 @@ class CausalSelfAttention(nn.Module):
         self.c_proj.GPT_SCALE_INIT = 1
         self.n_head = config.n_head
         self.n_embd = config.n_embd
+        self.head_dim = config.n_embd // config.n_head
+        self.rotary_emb = RotaryEmbedding(self.head_dim, max_seq_len=config.block_size)
         self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size)).view(1, 1, config.block_size, config.block_size))
 
     def forward(self, x):
         B, T, C = x.size()
         qkv = self.c_attn(x)
         q, k, v = qkv.split(self.n_embd, dim=2)
-        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
-        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
-        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
+        k = k.view(B, T, self.n_head, self.head_dim)
+        q = q.view(B, T, self.n_head, self.head_dim)
+        v = v.view(B, T, self.n_head, self.head_dim)
+        cos, sin = self.rotary_emb(T, device=x.device)
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
         y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         y = self.c_proj(y)
@@ -65,7 +96,7 @@ class Block(nn.Module):
         return x
 
 @dataclass
-class GPTConfig:
+class LLMConfig:
     depth: int = 12
     block_size: int = 1024
     vocab_size: int = 50257
@@ -77,13 +108,12 @@ class GPTConfig:
     @property
     def n_embd(self): return self.depth * 64
 
-class GPT(nn.Module):
+class LLM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.transformer = nn.ModuleDict(dict(
             wte = nn.Embedding(config.vocab_size, config.n_embd),
-            wpe = nn.Embedding(config.block_size, config.n_embd),
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
             ln_f = nn.LayerNorm(config.n_embd)
         ))
@@ -99,16 +129,12 @@ class GPT(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
 
     def forward(self, idx, targets=None):
         B, T = idx.size()
         assert T <= self.config.block_size, f"Cannot forward sequence of length {T}, block size is only {self.config.block_size}."
-        pos = torch.arange(0, T, dtype=torch.long, device=idx.device)
-        pos_emb = self.transformer.wpe(pos)
         tok_emb = self.transformer.wte(idx)
-        x = tok_emb + pos_emb
+        x = tok_emb
         for block in self.transformer.h:
             x = block(x)
         x = self.transformer.ln_f(x)

@@ -8,7 +8,7 @@ import wandb
 from torch.distributed import init_process_group, destroy_process_group
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-from model import GPT, GPTConfig
+from model import LLM, LLMConfig
 from util import DataLoaderLite, fmt_elapsed
 from hellaswag import get_hellaswag_acc
 import json
@@ -69,7 +69,7 @@ val_loader = DataLoaderLite(B=B, T=T, split="val", process_rank=ddp_rank, num_pr
 
 torch.set_float32_matmul_precision('high')
 
-model = GPT(GPTConfig(depth=args.depth, vocab_size=50304))
+model = LLM(LLMConfig(depth=args.depth, vocab_size=50304))
 model.to(device)
 if device_type == 'cuda':
     model = torch.compile(model)
