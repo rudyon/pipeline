@@ -12,12 +12,13 @@ class MoE(nn.Module):
         self.experts = nn.ModuleList([MLP(config) for _ in range(num_experts)])
 
     def forward(self, x):
-        logits = self.router(x)
+        B, T, C = x.size()
+        logits = self.router(x) 
         probs = F.softmax(logits, dim=-1)
         expert_idx = torch.argmax(probs, dim=-1)
         final_output = torch.zeros_like(x)
         for i, expert in enumerate(self.experts):
-            mask = (expert_idx == i)
+            mask = expert_idx == i
             if mask.any():
                 final_output[mask] = expert(x[mask])
         return final_output
