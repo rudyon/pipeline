@@ -11,3 +11,4 @@
 {"id": 10, "name": "moe", "val_loss": 6.532217025756836, "kept": false}
 {"id": 11, "name": "mobileconv", "val_loss": 6.512185573577881, "kept": false}
 {"id": 12, "name": "rmsnorm2", "val_loss": 6.513923168182373, "kept": false}
+{"id": 13, "name": "muon", "val_loss": 6.449503421783447, "kept": true}
