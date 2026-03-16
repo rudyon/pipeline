@@ -12,18 +12,17 @@ class MoE(nn.Module):
         self.experts = nn.ModuleList([MLP(config) for _ in range(num_experts)])
 
     def forward(self, x):
-        def forward(self, x):
-            B, T, C = x.size()
-            logits = self.router(x) 
-            probs = F.softmax(logits, dim=-1)
-            expert_idx = torch.argmax(probs, dim=-1)
-            final_output = torch.zeros_like(x)
-            for i, expert in enumerate(self.experts):
-                mask = (expert_idx == i)
-                if mask.any():
-                    res = expert(x[mask]).to(x.dtype)
-                    final_output[mask] = res    
-            return final_output
+        B, T, C = x.size()
+        logits = self.router(x) 
+        probs = F.softmax(logits, dim=-1)
+        expert_idx = torch.argmax(probs, dim=-1)
+        final_output = torch.zeros_like(x)
+        for i, expert in enumerate(self.experts):
+            mask = (expert_idx == i)
+            if mask.any():
+                res = expert(x[mask]).to(x.dtype)
+                final_output[mask] = res    
+        return final_output
 
 def apply_rotary_pos_emb(q, k, cos, sin):
     cos = cos.unsqueeze(0).unsqueeze(2)
