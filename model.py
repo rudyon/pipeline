@@ -45,8 +45,7 @@ class CausalSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         assert config.n_embd % config.n_head == 0
-        self.kernel_size = 3
-        self.l_conv = nn.Conv1d(config.n_embd, config.n_embd, kernel_size=self.kernel_size, groups=config.n_embd, bias=False)
+        self.l_conv = nn.Conv1d(config.n_embd, config.n_embd, kernel_size=3, groups=config.n_embd, bias=False)
         self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=False)
         self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=False)
         self.c_proj.GPT_SCALE_INIT = 1
@@ -59,7 +58,7 @@ class CausalSelfAttention(nn.Module):
     def forward(self, x):
         B, T, C = x.size()
         x = x.transpose(1, 2)
-        x = F.pad(x, (self.kernel_size - 1, 0))
+        x = F.pad(x, (2, 0))
         x = self.l_conv(x)
         x = x.transpose(1, 2)
         qkv = self.c_attn(x)
@@ -80,11 +79,15 @@ class CausalSelfAttention(nn.Module):
 class MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.l_conv = nn.Conv1d(config.n_embd, config.n_embd, kernel_size=3, groups=config.n_embd, bias=False)
         self.swiglu = SwiGLU(config.n_embd, 4 * config.n_embd)
         self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd, bias=False)
         self.c_proj.GPT_SCALE_INIT = 1
 
     def forward(self, x):
+        x = x.transpose(1, 2)
+        x = F.pad(x, (2, 0))
+        x = self.l_conv(x).transpose(1, 2)
         x = self.swiglu(x)
         x = self.c_proj(x)
         return x
