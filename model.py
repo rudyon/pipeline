@@ -181,4 +181,6 @@ class LLM(nn.Module):
         ]
         opt1 = torch.optim.Muon(muon_params, lr=learning_rate, momentum=0.95)
         opt2 = torch.optim.AdamW(adamw_groups, lr=learning_rate, betas=(0.9, 0.95), eps=1e-8, fused=('cuda' in device))
+        print(f"Muon updating {len(muon_params)} tensors")
+        print(f"AdamW updating {len(adamw_params)} tensors")
         return [opt1, opt2]
