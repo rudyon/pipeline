@@ -5,3 +5,4 @@
 {"id": 4, "name": "noposembd", "val_loss": 6.818004608154297, "kept": true}
 {"id": 5, "name": "ropenobias", "val_loss": 6.780716896057129, "kept": true}
 {"id": 6, "name": "maxlr1e-3", "val_loss": 6.529060363769531, "kept": true}
+{"id": 7, "name": "noweighttying", "val_loss": 6.903012275695801, "kept": false}
