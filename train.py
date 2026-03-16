@@ -169,17 +169,17 @@ for step in range(start_step, max_steps):
         print(f"step {step:4d} | loss: {loss_accum.item():.6f} | dt {dt*1000:.2f}ms | tok/sec {tokens_per_sec:.2f} | elapsed {fmt_elapsed((time.time() - time_start))}")
         if args.wandb:
             wandb.log({"train loss": loss_accum.item(), "lr": lr}, step=step)
-print(f"training took {fmt_elapsed((time.time() - time_start))}")
-if args.experiment:
-    result = {
-        "id": len(open("experiments.jsonl").readlines()) if os.path.exists("experiments.jsonl") else 0,
-        "name": args.experiment,
-        "val_loss": val_loss_accum.item(),
-        "kept": None  # filled in manually later
-    }
-    with open("experiments.jsonl", "a") as f:
-        f.write(json.dumps(result) + "\n")
-    print(f"logged experiment '{args.experiment}' with val loss {val_loss_accum.item():.4f}")
+        print(f"training took {fmt_elapsed((time.time() - time_start))}")
+        if args.experiment:
+            result = {
+                "id": len(open("experiments.jsonl").readlines()) if os.path.exists("experiments.jsonl") else 0,
+                "name": args.experiment,
+                "val_loss": val_loss_accum.item(),
+                "kept": None  # filled in manually later
+            }
+            with open("experiments.jsonl", "a") as f:
+                f.write(json.dumps(result) + "\n")
+            print(f"logged experiment '{args.experiment}' with val loss {val_loss_accum.item():.4f}")
 
 
 if ddp:
