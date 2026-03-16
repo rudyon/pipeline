@@ -75,7 +75,7 @@ if device_type == 'cuda':
     model = torch.compile(model)
 
 if ddp:
-    model = DDP(model, device_ids=[ddp_local_rank], find_unused_parameters=True)
+    model = DDP(model, device_ids=[ddp_local_rank])
 
 raw_model = model.module if ddp else model
 optimizer = raw_model.configure_optimizers(weight_decay=0.1, learning_rate=0.0006, device=device)
@@ -92,9 +92,17 @@ def get_lr(it):
 
 start_step = 0
 if args.resume:
+    if master_process:
+        print(f"Resuming from checkpoint: {args.resume}")
     checkpoint = torch.load(args.resume, map_location=device)
     raw_model.load_state_dict(checkpoint['model'])
-    optimizer.load_state_dict(checkpoint['optimizer'])
+    checkpoint_optimizers = checkpoint['optimizer']
+    if isinstance(checkpoint_optimizers, list) and len(checkpoint_optimizers) == len(optimizer):
+        for opt, state in zip(optimizer, checkpoint_optimizers):
+            opt.load_state_dict(state)
+    else:
+        if master_process:
+            print("Warning: Optimizer checkpoint format mismatch. Starting optimizers from scratch.")
     start_step = checkpoint['step'] + 1
 
 time_start = time.time()
@@ -129,7 +137,7 @@ for step in range(start_step, max_steps):
             
             checkpoint = {
                 'model': raw_model.state_dict(),
-                'optimizer': optimizer.state_dict(),
+                'optimizer': [opt.state_dict() for opt in optimizer],
                 'step': step,
                 'val_loss': val_loss_accum.item()
             }
@@ -140,7 +148,8 @@ for step in range(start_step, max_steps):
 
     # Training loop
     model.train()
-    optimizer.zero_grad()
+    for opt in optimizer:
+        opt.zero_grad()
     loss_accum = 0.0
     for micro_step in range(grad_accum_steps):
         if ddp:
@@ -158,8 +167,9 @@ for step in range(start_step, max_steps):
         
     norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     lr = get_lr(step)
-    for param_group in optimizer.param_groups: param_group['lr'] = lr
-    optimizer.step()
+    for opt in optimizer:
+        for param_group in opt.param_groups:
+            param_group['lr'] = lr
     
     if device_type == 'cuda': torch.cuda.synchronize()
     

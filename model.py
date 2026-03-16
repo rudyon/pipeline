@@ -169,20 +169,16 @@ class LLM(nn.Module):
         return enc.decode(x[0].tolist())
     
     def configure_optimizers(self, weight_decay, learning_rate, device):
-        param_dict = {pn: p for pn, p in self.named_parameters()}
-        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
-        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
-        nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
-        optim_groups = [
+        param_dict = {pn: p for pn, p in self.named_parameters() if p.requires_grad}
+        muon_params = [p for n, p in param_dict.items() if p.ndim == 2 and "wte" not in n and "lm_head" not in n]
+        muon_set = set(muon_params)
+        adamw_params = [p for p in param_dict.values() if p not in muon_set]
+        decay_params = [p for p in adamw_params if p.ndim >= 2]
+        nodecay_params = [p for p in adamw_params if p.ndim < 2]
+        adamw_groups = [
             {'params': decay_params, 'weight_decay': weight_decay},
             {'params': nodecay_params, 'weight_decay': 0.0}
         ]
-        num_decay_params = sum(p.numel() for p in decay_params)
-        num_nodecay_params = sum(p.numel() for p in nodecay_params)
-        print(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")
-        print(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")
-        fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
-        use_fused = fused_available and 'cuda' in device
-        print(f"using fused AdamW: {use_fused}")
-        optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=(0.9, 0.95), eps=0.00000001, fused=use_fused)
-        return optimizer
+        opt1 = torch.optim.Muon(muon_params, lr=learning_rate, momentum=0.95)
+        opt2 = torch.optim.AdamW(adamw_groups, lr=learning_rate, betas=(0.9, 0.95), eps=1e-8, fused=('cuda' in device))
+        return [opt1, opt2]
