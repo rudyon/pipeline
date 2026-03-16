@@ -4,3 +4,4 @@
 {"id": 3, "name": "swiglu", "val_loss": 6.891933441162109, "kept": true}
 {"id": 4, "name": "noposembd", "val_loss": 6.818004608154297, "kept": true}
 {"id": 5, "name": "ropenobias", "val_loss": 6.780716896057129, "kept": true}
+{"id": 6, "name": "maxlr1e-3", "val_loss": 6.529060363769531, "kept": true}
