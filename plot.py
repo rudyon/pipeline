@@ -1,5 +1,6 @@
 import json
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator, FormatStrFormatter
 import os
 
 experiments = []
@@ -14,21 +15,26 @@ else:
     ids = [e["id"] for e in experiments]
     losses = [e["val_loss"] for e in experiments]
     kept = [e for e in experiments if e["kept"]]
-    
-    plt.figure(figsize=(8, 4))
-    plt.scatter(ids, losses, color="gray", alpha=0.5, label="Discarded")
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.scatter(ids, losses, color="gray", alpha=0.3, label="Discarded", s=20) 
     if kept:
         kept_ids = [e["id"] for e in kept]
         kept_losses = [e["val_loss"] for e in kept]
-        plt.scatter(kept_ids, kept_losses, color="green", label="Kept")
-        plt.plot(kept_ids, kept_losses, color="green")
-    for e in experiments:
-        plt.annotate(e["name"], (e["id"], e["val_loss"]), 
-                    textcoords="offset points", xytext=(0, 4),
-                    fontsize=8, rotation=45, ha='left')
-    plt.xlabel("Experiment #")
-    plt.ylabel("Val Loss")
-    plt.title(f"Experiments: {len(experiments)} total")
-    plt.legend()
+        ax.step(kept_ids, kept_losses, color="green", where='post', alpha=0.5, zorder=1)
+        ax.scatter(kept_ids, kept_losses, color="green", label="Kept", s=40, zorder=2)
+        for e in kept:
+            ax.annotate(e["name"], (e["id"], e["val_loss"]), 
+                        textcoords="offset points", xytext=(0, 5),
+                        fontsize=8, rotation=45, ha='left', 
+                        color="green", fontweight='semibold')
+            
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.set_xlabel("Experiment #")
+    ax.set_ylabel("Validation Loss (lower is better)")
+    ax.set_title(f"Research Progress: {len(experiments)} Experiments, {len(kept)} Kept Improvments")
+    ax.legend()
+    ax.grid(True, which='both', axis='y', linestyle='--', alpha=0.3)
+    ax.grid(True, which='both', axis='x', linestyle='--', alpha=0.3)
+    plt.tight_layout()
     plt.savefig("experiments.png")
     print("saved experiments.png")

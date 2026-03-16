@@ -1,3 +1,4 @@
 {"id": 0, "name": "baseline", "val_loss": 6.894501686096191, "kept": true}
 {"id": 1, "name": "rmsnorm", "val_loss": 6.903061866760254, "kept": false}
 {"id": 2, "name": "nogptweightinits", "val_loss": 7.681303977966309, "kept": false}
+{"id": 3, "name": "swiglu", "val_loss": 6.891933441162109, "kept": true}
