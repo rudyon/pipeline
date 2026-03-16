@@ -5,6 +5,17 @@ import torch.nn.functional as F
 import tiktoken
 import inspect
 
+class SwiGLU(nn.Module):
+    def __init__(self, input_dim, output_dim, beta=1.0):
+        super().__init__()
+        self.beta = beta
+        self.w_v = nn.Linear(input_dim, 2 * output_dim)
+
+    def forward(self, x):
+        gate_raw, value = self.w_v(x).chunk(2, dim=-1)
+        gate = gate_raw * torch.sigmoid(self.beta * gate_raw)
+        return gate * value
+
 class CausalSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -31,14 +42,12 @@ class CausalSelfAttention(nn.Module):
 class MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd)
-        self.gelu = nn.GELU(approximate='tanh')
+        self.swiglu = SwiGLU(config.n_embd, 4 * config.n_embd)
         self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd)
         self.c_proj.GPT_SCALE_INIT = 1
 
     def forward(self, x):
-        x = self.c_fc(x)
-        x = self.gelu(x)
+        x = self.swiglu(x)
         x = self.c_proj(x)
         return x
     
