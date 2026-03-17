@@ -3,7 +3,6 @@ import torch.nn as nn
 from dataclasses import dataclass
 import torch.nn.functional as F
 import tiktoken
-import inspect
 
 def apply_rotary_pos_emb(q, k, cos, sin):
     cos = cos.unsqueeze(0).unsqueeze(2)
@@ -54,7 +53,8 @@ class CausalSelfAttention(nn.Module):
         self.n_embd = config.n_embd
         self.head_dim = config.n_embd // config.n_head
         self.rotary_emb = RotaryEmbedding(self.head_dim, max_seq_len=config.block_size)
-        self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size)).view(1, 1, config.block_size, config.block_size))
+        self.q_norm = nn.LayerNorm(self.head_dim, elementwise_affine=False)
+        self.k_norm = nn.LayerNorm(self.head_dim, elementwise_affine=False)
 
     def forward(self, x):
         B, T, C = x.size()
@@ -69,6 +69,8 @@ class CausalSelfAttention(nn.Module):
         v = v.view(B, T, self.n_head, self.head_dim)
         cos, sin = self.rotary_emb(T, device=x.device)
         q, k = apply_rotary_pos_emb(q, k, cos, sin)
+        q = self.q_norm(q)
+        k = self.k_norm(k)
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
@@ -92,14 +94,13 @@ class MLP(nn.Module):
 class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.ln_1 = nn.LayerNorm(config.n_embd)
+        self.ln = nn.LayerNorm(config.n_embd)
         self.attn = CausalSelfAttention(config)
-        self.ln_2 = nn.LayerNorm(config.n_embd)
         self.mlp = MLP(config)
 
     def forward(self, x):
-        x = x + self.attn(self.ln_1(x))
-        x = x + self.mlp(self.ln_2(x))
+        norm_x = self.ln(x)
+        x = x + self.attn(norm_x) + self.mlp(norm_x)
         return x
 
 @dataclass
