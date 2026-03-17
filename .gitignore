@@ -6,5 +6,3 @@ data_cache
 test_cache
 wandb
 model_*.pt
-program.md
-experiments.jsonl
