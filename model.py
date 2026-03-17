@@ -17,7 +17,7 @@ def apply_rotary_pos_emb(q, k, cos, sin):
     return q_embed, k_embed
 
 class RotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_seq_len=8192, base=10000.0):
+    def __init__(self, dim, max_seq_len=8192, base=50000.0):
         super().__init__()
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
