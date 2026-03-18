@@ -4,7 +4,7 @@ An LLM training pipeline. I am kind of trying to turn it into a proper and robus
 
 ## model
 
-You can see the model I have used this repo to train [here](https://huggingface.co/rudyon/rudygpt).
+You can see the model I have used this repo to train [here](https://huggingface.co/rudyon/rudygpt). An instruct fine-tune of it is [here](https://huggingface.co/rudyon/rudygpt-instruct). Also you can talk to the instruct version [here](https://huggingface.co/spaces/rudyon/rudygpt).
 
 ## experiments
 
