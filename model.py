@@ -44,14 +44,17 @@ class CausalSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         assert config.n_embd % config.n_head == 0
+        self.n_head = config.n_head
+        self.n_kv_head = config.n_kv_head
+        self.n_groups = self.n_head // self.n_kv_head
+        self.head_dim = config.n_embd // config.n_head
         self.kernel_size = 3
         self.l_conv = nn.Conv1d(config.n_embd, config.n_embd, kernel_size=self.kernel_size, groups=config.n_embd, bias=False)
-        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=False)
+        self.q_dim = config.n_embd
+        self.kv_dim = self.n_kv_head * self.head_dim
+        self.c_attn = nn.Linear(config.n_embd, self.q_dim + 2 * self.kv_dim, bias=False)
         self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=False)
         self.c_proj.GPT_SCALE_INIT = 1
-        self.n_head = config.n_head
-        self.n_embd = config.n_embd
-        self.head_dim = config.n_embd // config.n_head
         self.rotary_emb = RotaryEmbedding(self.head_dim, max_seq_len=config.block_size)
         self.q_norm = nn.LayerNorm(self.head_dim, elementwise_affine=False)
         self.k_norm = nn.LayerNorm(self.head_dim, elementwise_affine=False)
@@ -63,12 +66,14 @@ class CausalSelfAttention(nn.Module):
         x = self.l_conv(x)
         x = x.transpose(1, 2)
         qkv = self.c_attn(x)
-        q, k, v = qkv.split(self.n_embd, dim=2)
-        k = k.view(B, T, self.n_head, self.head_dim)
+        q, k, v = qkv.split([self.q_dim, self.kv_dim, self.kv_dim], dim=2)
         q = q.view(B, T, self.n_head, self.head_dim)
-        v = v.view(B, T, self.n_head, self.head_dim)
+        k = k.view(B, T, self.n_kv_head, self.head_dim)
+        v = v.view(B, T, self.n_kv_head, self.head_dim)
         cos, sin = self.rotary_emb(T, device=x.device)
         q, k = apply_rotary_pos_emb(q, k, cos, sin)
+        k = torch.repeat_interleave(k, self.n_groups, dim=2)
+        v = torch.repeat_interleave(v, self.n_groups, dim=2)
         q = self.q_norm(q)
         k = self.k_norm(k)
         q = q.transpose(1, 2)
@@ -108,6 +113,7 @@ class LLMConfig:
     depth: int = 12
     block_size: int = 1024
     vocab_size: int = 50257
+    n_kv_head: int = 3
     
     @property
     def n_layer(self): return self.depth
@@ -152,7 +158,7 @@ class LLM(nn.Module):
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-100)
         return logits, loss
     
-    def generate(self, prompt, max_new_tokens=20, top_k=50, enc=None):
+    def generate(self, prompt, max_new_tokens=20, top_k=50, temperature=1.0, enc=None):
         if enc is None:
             enc = tiktoken.get_encoding('gpt2')
         tokens = enc.encode(prompt)
@@ -161,7 +167,7 @@ class LLM(nn.Module):
         with torch.no_grad():
             while x.size(1) < len(tokens) + max_new_tokens:
                 logits, _ = self(x)
-                logits = logits[:, -1, :]
+                logits = logits[:, -1, :] / max(temperature, 0.00001)
                 probs = F.softmax(logits, dim=-1)
                 topk_probs, topk_indices = torch.topk(probs, top_k, dim=-1)
                 ix = torch.multinomial(topk_probs, 1)
