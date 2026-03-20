@@ -111,7 +111,6 @@ class LLMConfig:
     depth: int = 12
     block_size: int = 1024
     vocab_size: int = 50257
-    n_kv_head: int = 4
     
     @property
     def n_layer(self): return self.depth
@@ -119,6 +118,12 @@ class LLMConfig:
     def n_head(self): return self.depth
     @property
     def n_embd(self): return self.depth * 64
+    @property
+    def n_kv_head(self):
+        if self.depth % 3 == 0:
+            return self.depth // 3
+        else:
+            return self.depth // 2
 
 class LLM(nn.Module):
     def __init__(self, config):
