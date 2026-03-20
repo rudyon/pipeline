@@ -111,7 +111,7 @@ class LLMConfig:
     depth: int = 12
     block_size: int = 1024
     vocab_size: int = 50257
-    n_kv_head: int = 3
+    n_kv_head: int = 4
     
     @property
     def n_layer(self): return self.depth
