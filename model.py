@@ -43,7 +43,7 @@ class SwiGLU(nn.Module):
 class CausalSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        assert config.n_embd % config.n_head == 0
+        assert config.n_head % config.n_kv_head == 0, f"n_head ({config.n_head}) must be divisible by n_kv_head ({config.n_kv_head})"
         self.n_head = config.n_head
         self.n_kv_head = config.n_kv_head
         self.n_groups = self.n_head // self.n_kv_head
