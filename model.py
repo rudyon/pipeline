@@ -103,7 +103,8 @@ class Block(nn.Module):
 
     def forward(self, x):
         norm_x = self.ln(x)
-        x = x + self.attn(norm_x) + self.mlp(norm_x)
+        x = x + self.attn(norm_x)
+        x = x + self.mlp(norm_x)
         return x
 
 @dataclass
