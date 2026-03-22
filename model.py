@@ -3,6 +3,7 @@ import torch.nn as nn
 from dataclasses import dataclass
 import torch.nn.functional as F
 import tiktoken
+import numpy as np
 
 
 def apply_rotary_pos_emb(q, k, cos, sin):
@@ -38,7 +39,30 @@ class MoE(nn.Module):
         self.n_experts = config.n_experts
         self.n_active_experts = config.n_active_experts
         self.router = nn.Linear(config.n_embd, config.n_experts, bias=False)
-        self.experts = nn.ModuleList([MLP(config) for _ in range(config.n_experts)])
+
+        # Generate capacity multipliers if not provided
+        if config.expert_capacity_multipliers is None:
+            # Linear scale from 0.5x to 4x
+            multipliers = np.linspace(0.5, 4.0, config.n_experts).tolist()
+        else:
+            multipliers = config.expert_capacity_multipliers
+            assert len(multipliers) == config.n_experts, (
+                f"expert_capacity_multipliers length ({len(multipliers)}) "
+                f"must match n_experts ({config.n_experts})"
+            )
+
+        # Create heterogeneous experts with different FFN dimensions
+        self.experts = nn.ModuleList(
+            [
+                HeterogeneousMLP(
+                    n_embd=config.n_embd, ffn_dim=int(config.ffn_dim * mult)
+                )
+                for mult in multipliers
+            ]
+        )
+
+        # Store capacities for capacity-aware balancing
+        self.register_buffer("expert_capacities", torch.tensor(multipliers))
 
     def forward(self, x):
         B, T, C = x.size()
@@ -47,9 +71,18 @@ class MoE(nn.Module):
         weights, indices = probs.topk(self.n_active_experts, dim=-1)  # (B, T, K)
         weights = weights / weights.sum(dim=-1, keepdim=True)  # renormalize
 
-        # load balancing auxiliary loss (Switch Transformer)
+        # capacity-aware load balancing auxiliary loss
+        # normalize capacities to sum to n_experts for fair comparison
+        normalized_capacities = self.expert_capacities / self.expert_capacities.mean()
+
+        # target: small experts should handle more tokens (inverse of capacity)
+        target_distribution = 1.0 / normalized_capacities
+        target_distribution = target_distribution / target_distribution.sum()
+
         avg_probs = probs.mean(dim=[0, 1])  # (n_experts,)
-        aux_loss = self.n_experts * (avg_probs * avg_probs).sum()
+
+        # squared difference from target distribution
+        aux_loss = self.n_experts * ((avg_probs - target_distribution) ** 2).sum()
 
         # sparse dispatch: route tokens to experts without running unused experts
         x_flat = x.view(B * T, C)  # (N, C)
@@ -87,6 +120,23 @@ class MoE(nn.Module):
         )
 
         return out.view(B, T, C), aux_loss
+
+    def get_expert_usage_stats(self, x):
+        """Returns expert usage statistics for analysis (not for training)."""
+        with torch.no_grad():
+            B, T, C = x.size()
+            logits = self.router(x)
+            probs = F.softmax(logits, dim=-1)
+            _, indices = probs.topk(self.n_active_experts, dim=-1)
+            indices_flat = indices.view(-1)
+            usage_counts = indices_flat.bincount(minlength=self.n_experts)
+            return {
+                "usage_counts": usage_counts.cpu().tolist(),
+                "usage_percentages": (
+                    (usage_counts.float() / indices_flat.numel() * 100).cpu().tolist()
+                ),
+                "capacities": self.expert_capacities.cpu().tolist(),
+            }
 
 
 class RMSNorm(nn.Module):
@@ -172,6 +222,19 @@ class MLP(nn.Module):
         return x
 
 
+class HeterogeneousMLP(nn.Module):
+    def __init__(self, n_embd: int, ffn_dim: int):
+        super().__init__()
+        self.swiglu = SwiGLU(n_embd, ffn_dim)
+        self.c_proj = nn.Linear(ffn_dim, n_embd, bias=False)
+        self.c_proj.GPT_SCALE_INIT = 1
+
+    def forward(self, x):
+        x = self.swiglu(x)
+        x = self.c_proj(x)
+        return x
+
+
 class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -194,6 +257,7 @@ class LLMConfig:
     vocab_size: int = 50257
     n_experts: int = 8
     n_active_experts: int = 2
+    expert_capacity_multipliers: list = None  # None = auto-generate linear scale
 
     @property
     def n_layer(self):
