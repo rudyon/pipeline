@@ -51,17 +51,40 @@ class MoE(nn.Module):
         avg_probs = probs.mean(dim=[0, 1])  # (n_experts,)
         aux_loss = self.n_experts * (avg_probs * avg_probs).sum()
 
-        # run all experts on all tokens, then select and weight
+        # sparse dispatch: route tokens to experts without running unused experts
         x_flat = x.view(B * T, C)  # (N, C)
-        expert_outs = torch.stack([e(x_flat) for e in self.experts], dim=1)  # (N, E, C)
+        indices_flat = indices.view(B * T * self.n_active_experts)  # (N*K,)
+        weights_flat = weights.view(B * T * self.n_active_experts, 1)  # (N*K, 1)
 
-        # gather top-K expert outputs and compute weighted sum
-        indices_flat = indices.view(B * T, self.n_active_experts)  # (N, K)
-        weights_flat = weights.view(B * T, self.n_active_experts)  # (N, K)
-        gathered = expert_outs[
-            torch.arange(B * T, device=x.device).unsqueeze(1), indices_flat
-        ]  # (N, K, C)
-        out = (weights_flat.unsqueeze(-1) * gathered).sum(dim=1)  # (N, C)
+        # repeat each token K times (once per active expert slot)
+        x_repeated = x_flat.repeat_interleave(self.n_active_experts, dim=0)  # (N*K, C)
+
+        # sort by expert index so each expert processes a contiguous batch
+        sort_idx = indices_flat.argsort()
+        x_sorted = x_repeated[sort_idx]  # (N*K, C)
+        experts_sorted = indices_flat[sort_idx]  # (N*K,)
+
+        # count how many tokens each expert gets
+        counts = experts_sorted.bincount(minlength=self.n_experts).tolist()
+
+        # run each expert on its batch
+        out_sorted = torch.empty_like(x_sorted)
+        start = 0
+        for e, count in enumerate(counts):
+            if count > 0:
+                out_sorted[start : start + count] = self.experts[e](
+                    x_sorted[start : start + count]
+                )
+            start += count
+
+        # unsort and accumulate weighted outputs
+        out_repeated = torch.empty_like(x_sorted)
+        out_repeated[sort_idx] = out_sorted
+        out = (
+            (out_repeated * weights_flat)
+            .view(B * T, self.n_active_experts, C)
+            .sum(dim=1)
+        )
 
         return out.view(B, T, C), aux_loss
 
