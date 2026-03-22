@@ -118,7 +118,7 @@ class CausalSelfAttention(nn.Module):
         self.n_kv_head = config.n_kv_head
         self.n_groups = self.n_head // self.n_kv_head
         self.head_dim = config.n_embd // config.n_head
-        self.kernel_size = 3
+        self.kernel_size = 7
         self.l_conv = nn.Conv1d(
             config.n_embd,
             config.n_embd,
