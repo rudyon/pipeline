@@ -9,9 +9,27 @@ if [ ! "$(ls -A test_cache 2>/dev/null)" ]; then
     python prepare_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT -m 2 --cache test_cache
 fi
 
-torchrun --standalone --nproc_per_node=$NUM_GPUS train.py 300 \
+# Default to 300 steps, use 600 if -l/--long flag is present
+STEPS=300
+EXPERIMENT_ARG="--experiment"
+if [[ "$*" == *"-l"* ]] || [[ "$*" == *"--long"* ]]; then
+    STEPS=600
+    EXPERIMENT_ARG="--experimentlong"
+    echo "Running long experiment: 600 steps"
+fi
+
+# Get experiment name (first non-flag argument)
+EXPERIMENT_NAME=""
+for arg in "$@"; do
+    if [[ "$arg" != "-l" ]] && [[ "$arg" != "--long" ]]; then
+        EXPERIMENT_NAME="$arg"
+        break
+    fi
+done
+
+torchrun --standalone --nproc_per_node=$NUM_GPUS train.py $STEPS \
     --depth 4 \
     --batch 32768 \
     --micro 4 \
     --cache test_cache \
-    --experiment $1
+    $EXPERIMENT_ARG $EXPERIMENT_NAME

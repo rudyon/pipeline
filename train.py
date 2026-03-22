@@ -23,10 +23,15 @@ parser.add_argument("-w", "--wandb", default=None)
 parser.add_argument("-c", "--cache", default="data_cache")
 parser.add_argument("-r", "--resume", default=None)
 parser.add_argument("-e", "--experiment", default=None)
+parser.add_argument("-el", "--experimentlong", default=None)
 args = parser.parse_args()
 
+if args.experimentlong is not None and args.experiment is not None:
+    print("can't mix long and short experiment arguments. sorry")
+    os.exit()
+
 # manual seed for experimentation only!
-if args.experiment is not None:
+if args.experiment is not None or args.experimentlong is not None:
     torch.manual_seed(42)
 
 # Setup DDP
@@ -238,6 +243,20 @@ if master_process:
             f.write("\n" + json.dumps(result))
         print(
             f"logged experiment '{args.experiment}' with val loss {val_loss_accum.item():.4f}"
+        )
+    elif args.experimentlong:
+        result = {
+            "id": len(open("experiments_long.jsonl").readlines())
+            if os.path.exists("experiments_long.jsonl")
+            else 0,
+            "name": args.experimentlong,
+            "val_loss": val_loss_accum.item(),
+            "kept": None,  # filled in manually later
+        }
+        with open("experiments_long.jsonl", "a") as f:
+            f.write("\n" + json.dumps(result))
+        print(
+            f"logged experimentlong '{args.experimentlong}' with val loss {val_loss_accum.item():.4f}"
         )
 
 

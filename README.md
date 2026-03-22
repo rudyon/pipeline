@@ -24,6 +24,8 @@ I am trying to improve the architecture over time with experiments. At the time 
 
 ## experiments
 
-I am running experiments on this repository to try and improve the architecture/hyperparameters. The experiments are done by making a change to the codebase and then running `experiment.sh` which does a training run with `steps=300` and `depth=4` on 2 shards of the [HuggingFaceFW/fineweb-edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu) dataset. When the experiment is done it is logged into the `experiments.jsonl` file and `plot.py` is run to regenerate the graph below. The results of the experiments are kept in the repo going forward if validation loss dropped compared to the previous best validation loss.
+I am running experiments on this repository to try and improve the architecture/hyperparameters. The experiments are done by making a change to the codebase and then running `experiment.sh` which does a training run with `steps=300` (or `steps=600` for long experiments) and `depth=4` on 2 shards of the [HuggingFaceFW/fineweb-edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu) dataset. When the experiment is done it is logged into the `experiments.jsonl` (or `experiments_long.jsonl` for long experiments) file and `plot.py` is run to regenerate the graphs below. The results of the experiments are kept in the repo going forward if validation loss dropped compared to the previous best validation loss. If the validation loss doesn't show any drop in the short experiment run then sometimes I don't discard it but instead do a long experiment run. I don't always do a long experiment run. Long experiments were added later as such `baseline` in short experiments is not equal to `baseline` in long experiments.
 
 ![experiments graph](experiments.png)
+
+![long experiments graph](experiments_long.png)
