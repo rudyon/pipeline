@@ -1,1 +1,2 @@
 {"id": 0, "name": "baseline", "val_loss": 5.410120010375977, "kept": true}
+{"id": 1, "name": "heterogeneousmoe2", "val_loss": 5.443597793579102, "kept": false}
