@@ -16,3 +16,4 @@
 {"id": 15, "name": "ropebase50000", "val_loss": 6.322175979614258, "kept": true}
 {"id": 16, "name": "gqa", "val_loss": 6.2920403480529785, "kept": true}
 {"id": 17, "name": "swigluhiddendim-rmsnorm3", "val_loss": 6.284122467041016, "kept": true}
+{"id": 18, "name": "moe2", "val_loss": 6.246536731719971, "kept": true}
