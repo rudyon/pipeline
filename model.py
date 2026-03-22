@@ -32,6 +32,15 @@ class RotaryEmbedding(nn.Module):
         return emb.cos(), emb.sin()
 
 
+class RMSNorm(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + 1e-6) * self.weight
+
+
 class SwiGLU(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
@@ -96,8 +105,8 @@ class CausalSelfAttention(nn.Module):
 class MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.swiglu = SwiGLU(config.n_embd, 4 * config.n_embd)
-        self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd, bias=False)
+        self.swiglu = SwiGLU(config.n_embd, config.ffn_dim)
+        self.c_proj = nn.Linear(config.ffn_dim, config.n_embd, bias=False)
         self.c_proj.GPT_SCALE_INIT = 1
 
     def forward(self, x):
@@ -109,8 +118,8 @@ class MLP(nn.Module):
 class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.ln1 = nn.LayerNorm(config.n_embd)
-        self.ln2 = nn.LayerNorm(config.n_embd)
+        self.ln1 = RMSNorm(config.n_embd)
+        self.ln2 = RMSNorm(config.n_embd)
         self.attn = CausalSelfAttention(config)
         self.mlp = MLP(config)
 
@@ -145,6 +154,11 @@ class LLMConfig:
         else:
             return self.depth // 2
 
+    @property
+    def ffn_dim(self):
+        raw = int(8 / 3 * self.n_embd)
+        return (raw + 63) // 64 * 64  # round up to multiple of 64
+
 
 class LLM(nn.Module):
     def __init__(self, config):
@@ -154,7 +168,7 @@ class LLM(nn.Module):
             dict(
                 wte=nn.Embedding(config.vocab_size, config.n_embd),
                 h=nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
-                ln_f=nn.LayerNorm(config.n_embd),
+                ln_f=RMSNorm(config.n_embd),
             )
         )
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
