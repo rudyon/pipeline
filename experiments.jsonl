@@ -19,3 +19,4 @@
 {"id": 18, "name": "moe2", "val_loss": 6.246536731719971, "kept": true}
 {"id": 19, "name": "n_experts8-n_active_experts2", "val_loss": 6.226807117462158, "kept": true}
 {"id": 20, "name": "convattentionkernel7", "val_loss": 6.282163143157959, "kept": false}
+{"id": 21, "name": "heterogeneousmoe", "val_loss": 6.239530086517334, "kept": false}

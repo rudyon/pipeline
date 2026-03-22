@@ -42,8 +42,9 @@ class MoE(nn.Module):
 
         # Generate capacity multipliers if not provided
         if config.expert_capacity_multipliers is None:
-            # Linear scale from 0.5x to 4x
-            multipliers = np.linspace(0.5, 4.0, config.n_experts).tolist()
+            # Linear scale from 0.75x to 2.0x (tighter range, ~2.67:1 ratio)
+            # Paper shows this range performs better than extreme ratios
+            multipliers = np.linspace(0.75, 2.0, config.n_experts).tolist()
         else:
             multipliers = config.expert_capacity_multipliers
             assert len(multipliers) == config.n_experts, (
@@ -71,18 +72,28 @@ class MoE(nn.Module):
         weights, indices = probs.topk(self.n_active_experts, dim=-1)  # (B, T, K)
         weights = weights / weights.sum(dim=-1, keepdim=True)  # renormalize
 
-        # capacity-aware load balancing auxiliary loss
-        # normalize capacities to sum to n_experts for fair comparison
-        normalized_capacities = self.expert_capacities / self.expert_capacities.mean()
+        # P-Penalty loss (paper: HMoE equation 4)
+        # Penalizes activation of larger experts by weighting usage × expert size
+        # This encourages the model to prefer smaller experts when possible
 
-        # target: small experts should handle more tokens (inverse of capacity)
-        target_distribution = 1.0 / normalized_capacities
-        target_distribution = target_distribution / target_distribution.sum()
+        # Calculate actual usage per expert (fraction of tokens routed to each)
+        indices_flat_for_loss = indices.view(-1)  # (B*T*K,)
+        usage_per_expert = (
+            indices_flat_for_loss.bincount(minlength=self.n_experts).float()
+            / indices_flat_for_loss.numel()
+        )
 
+        # Average routing probability across all tokens
         avg_probs = probs.mean(dim=[0, 1])  # (n_experts,)
 
-        # squared difference from target distribution
-        aux_loss = self.n_experts * ((avg_probs - target_distribution) ** 2).sum()
+        # Penalty term: usage weighted by expert capacity (size)
+        # Larger experts incur higher penalty when activated
+        weighted_usage = usage_per_expert * self.expert_capacities.to(
+            usage_per_expert.device
+        )
+
+        # P-Penalty loss: encourages using smaller experts
+        aux_loss = self.n_experts * (weighted_usage * avg_probs).sum()
 
         # sparse dispatch: route tokens to experts without running unused experts
         x_flat = x.view(B * T, C)  # (N, C)
