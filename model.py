@@ -170,7 +170,7 @@ class LLMConfig:
     depth: int = 12
     block_size: int = 1024
     vocab_size: int = 50257
-    n_experts: int = 4
+    n_experts: int = 8
     n_active_experts: int = 2
 
     @property
