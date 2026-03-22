@@ -6,3 +6,4 @@ data_cache
 test_cache
 wandb
 model_*.pt
+.ruff_cache
