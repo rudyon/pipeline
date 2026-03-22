@@ -235,7 +235,7 @@ if master_process:
             "kept": None,  # filled in manually later
         }
         with open("experiments.jsonl", "a") as f:
-            f.write(json.dumps(result) + "\n")
+            f.write("\n" + json.dumps(result))
         print(
             f"logged experiment '{args.experiment}' with val loss {val_loss_accum.item():.4f}"
         )
