@@ -187,9 +187,9 @@ class LLMConfig:
     @property
     def n_kv_head(self):
         if self.depth % 3 == 0:
-            return self.depth // 3
+            return max(1, self.depth // 3)
         else:
-            return self.depth // 2
+            return max(1, self.depth // 2)
 
     @property
     def ffn_dim(self):
