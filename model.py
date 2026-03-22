@@ -33,15 +33,13 @@ class RotaryEmbedding(nn.Module):
 
 
 class SwiGLU(nn.Module):
-    def __init__(self, input_dim, output_dim, beta=1.0):
+    def __init__(self, input_dim, output_dim):
         super().__init__()
-        self.beta = beta
         self.w_v = nn.Linear(input_dim, 2 * output_dim, bias=False)
 
     def forward(self, x):
-        gate_raw, value = self.w_v(x).chunk(2, dim=-1)
-        gate = gate_raw * torch.sigmoid(self.beta * gate_raw)
-        return gate * value
+        gate, value = self.w_v(x).chunk(2, dim=-1)
+        return F.silu(gate) * value
 
 
 class CausalSelfAttention(nn.Module):
