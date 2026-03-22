@@ -51,18 +51,17 @@ class MoE(nn.Module):
         avg_probs = probs.mean(dim=[0, 1])  # (n_experts,)
         aux_loss = self.n_experts * (avg_probs * avg_probs).sum()
 
-        # compute weighted sum of top-2 expert outputs
-        x_flat = x.view(B * T, C)  # (B*T, C)
-        out = torch.zeros_like(x_flat)
-        indices_flat = indices.view(B * T, self.n_active_experts)  # (B*T, K)
-        weights_flat = weights.view(B * T, self.n_active_experts)  # (B*T, K)
-        for k in range(self.n_active_experts):
-            for e in range(self.n_experts):
-                mask = indices_flat[:, k] == e
-                if mask.any():
-                    out[mask] += weights_flat[mask, k : k + 1] * self.experts[e](
-                        x_flat[mask]
-                    )
+        # run all experts on all tokens, then select and weight
+        x_flat = x.view(B * T, C)  # (N, C)
+        expert_outs = torch.stack([e(x_flat) for e in self.experts], dim=1)  # (N, E, C)
+
+        # gather top-K expert outputs and compute weighted sum
+        indices_flat = indices.view(B * T, self.n_active_experts)  # (N, K)
+        weights_flat = weights.view(B * T, self.n_active_experts)  # (N, K)
+        gathered = expert_outs[
+            torch.arange(B * T, device=x.device).unsqueeze(1), indices_flat
+        ]  # (N, K, C)
+        out = (weights_flat.unsqueeze(-1) * gathered).sum(dim=1)  # (N, C)
 
         return out.view(B, T, C), aux_loss
 
