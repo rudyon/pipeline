@@ -32,6 +32,40 @@ class RotaryEmbedding(nn.Module):
         return emb.cos(), emb.sin()
 
 
+class MoE(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.n_experts = config.n_experts
+        self.router = nn.Linear(config.n_embd, config.n_experts, bias=False)
+        self.experts = nn.ModuleList([MLP(config) for _ in range(config.n_experts)])
+
+    def forward(self, x):
+        B, T, C = x.size()
+        logits = self.router(x)  # (B, T, n_experts)
+        probs = F.softmax(logits, dim=-1)
+        weights, indices = probs.topk(2, dim=-1)  # (B, T, 2)
+        weights = weights / weights.sum(dim=-1, keepdim=True)  # renormalize
+
+        # load balancing auxiliary loss (Switch Transformer)
+        avg_probs = probs.mean(dim=[0, 1])  # (n_experts,)
+        aux_loss = self.n_experts * (avg_probs * avg_probs).sum()
+
+        # compute weighted sum of top-2 expert outputs
+        x_flat = x.view(B * T, C)  # (B*T, C)
+        out = torch.zeros_like(x_flat)
+        indices_flat = indices.view(B * T, 2)  # (B*T, 2)
+        weights_flat = weights.view(B * T, 2)  # (B*T, 2)
+        for k in range(2):
+            for e in range(self.n_experts):
+                mask = indices_flat[:, k] == e
+                if mask.any():
+                    out[mask] += weights_flat[mask, k : k + 1] * self.experts[e](
+                        x_flat[mask]
+                    )
+
+        return out.view(B, T, C), aux_loss
+
+
 class RMSNorm(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -121,12 +155,13 @@ class Block(nn.Module):
         self.ln1 = RMSNorm(config.n_embd)
         self.ln2 = RMSNorm(config.n_embd)
         self.attn = CausalSelfAttention(config)
-        self.mlp = MLP(config)
+        self.moe = MoE(config)
 
     def forward(self, x):
         x = x + self.attn(self.ln1(x))
-        x = x + self.mlp(self.ln2(x))
-        return x
+        moe_out, aux_loss = self.moe(self.ln2(x))
+        x = x + moe_out
+        return x, aux_loss
 
 
 @dataclass
@@ -134,6 +169,7 @@ class LLMConfig:
     depth: int = 12
     block_size: int = 1024
     vocab_size: int = 50257
+    n_experts: int = 4
 
     @property
     def n_layer(self):
@@ -191,14 +227,21 @@ class LLM(nn.Module):
         )
         tok_emb = self.transformer.wte(idx)
         x = tok_emb
+        aux_loss = torch.tensor(0.0, device=idx.device)
         for block in self.transformer.h:
-            x = block(x)
+            x, block_aux = block(x)
+            aux_loss = aux_loss + block_aux
         x = self.transformer.ln_f(x)
         logits = self.lm_head(x)
         loss = None
         if targets is not None:
-            loss = F.cross_entropy(
+            ce_loss = F.cross_entropy(
                 logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-100
+            )
+            loss = (
+                ce_loss + 0.01 * aux_loss / self.config.n_layer
+                if self.training
+                else ce_loss
             )
         return logits, loss
 
