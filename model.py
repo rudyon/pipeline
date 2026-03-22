@@ -36,6 +36,7 @@ class MoE(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.n_experts = config.n_experts
+        self.n_active_experts = config.n_active_experts
         self.router = nn.Linear(config.n_embd, config.n_experts, bias=False)
         self.experts = nn.ModuleList([MLP(config) for _ in range(config.n_experts)])
 
@@ -43,7 +44,7 @@ class MoE(nn.Module):
         B, T, C = x.size()
         logits = self.router(x)  # (B, T, n_experts)
         probs = F.softmax(logits, dim=-1)
-        weights, indices = probs.topk(2, dim=-1)  # (B, T, 2)
+        weights, indices = probs.topk(self.n_active_experts, dim=-1)  # (B, T, K)
         weights = weights / weights.sum(dim=-1, keepdim=True)  # renormalize
 
         # load balancing auxiliary loss (Switch Transformer)
@@ -53,9 +54,9 @@ class MoE(nn.Module):
         # compute weighted sum of top-2 expert outputs
         x_flat = x.view(B * T, C)  # (B*T, C)
         out = torch.zeros_like(x_flat)
-        indices_flat = indices.view(B * T, 2)  # (B*T, 2)
-        weights_flat = weights.view(B * T, 2)  # (B*T, 2)
-        for k in range(2):
+        indices_flat = indices.view(B * T, self.n_active_experts)  # (B*T, K)
+        weights_flat = weights.view(B * T, self.n_active_experts)  # (B*T, K)
+        for k in range(self.n_active_experts):
             for e in range(self.n_experts):
                 mask = indices_flat[:, k] == e
                 if mask.any():
@@ -170,6 +171,7 @@ class LLMConfig:
     block_size: int = 1024
     vocab_size: int = 50257
     n_experts: int = 4
+    n_active_experts: int = 2
 
     @property
     def n_layer(self):
