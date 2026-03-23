@@ -5,18 +5,11 @@ import time
 import math
 import argparse
 import wandb
-from torch.distributed import destroy_process_group
+from torch.distributed import init_process_group, destroy_process_group
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from model import LLM, LLMConfig
-from util import (
-    DataLoaderLite,
-    fmt_elapsed,
-    setup_ddp,
-    get_lr,
-    save_checkpoint,
-    load_checkpoint,
-)
+from util import DataLoaderLite, fmt_elapsed
 from hellaswag import get_hellaswag_acc
 import json
 
@@ -31,24 +24,32 @@ parser.add_argument("-c", "--cache", default="data_cache")
 parser.add_argument("-r", "--resume", default=None)
 parser.add_argument("-e", "--experiment", default=None)
 parser.add_argument("-el", "--experimentlong", default=None)
-parser.add_argument(
-    "--vocab-size",
-    type=int,
-    default=50304,
-    help="Vocabulary size (must match tokenizer)",
-)
 args = parser.parse_args()
 
 if args.experimentlong is not None and args.experiment is not None:
     print("can't mix long and short experiment arguments. sorry")
-    exit(1)
+    os.exit()
 
 # manual seed for experimentation only!
 if args.experiment is not None or args.experimentlong is not None:
     torch.manual_seed(42)
 
 # Setup DDP
-ddp, ddp_rank, ddp_local_rank, ddp_world_size, master_process, device = setup_ddp()
+ddp = int(os.environ.get("RANK", -1)) != -1
+if ddp:
+    assert torch.cuda.is_available(), "CUDA required for DDP"
+    init_process_group(backend="nccl")
+    ddp_rank = int(os.environ["RANK"])
+    ddp_local_rank = int(os.environ["LOCAL_RANK"])
+    ddp_world_size = int(os.environ["WORLD_SIZE"])
+    device = f"cuda:{ddp_local_rank}"
+    torch.cuda.set_device(device)
+    master_process = ddp_rank == 0
+else:
+    ddp_rank = 0
+    ddp_world_size = 1
+    master_process = True
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
 if master_process and args.wandb is not None:
     wandb.init(project="pipeline", name=args.wandb)
@@ -87,7 +88,7 @@ val_loader = DataLoaderLite(
 
 torch.set_float32_matmul_precision("high")
 
-model = LLM(LLMConfig(depth=args.depth, vocab_size=args.vocab_size))
+model = LLM(LLMConfig(depth=args.depth, vocab_size=50304))
 model.to(device)
 if device_type == "cuda":
     model = torch.compile(model)
@@ -106,12 +107,35 @@ warmup_steps, max_steps = 715, args.steps
 stable_ratio = 0.8
 
 
+def get_lr(it):
+    if it < warmup_steps:
+        return max_lr * (it + 1) / warmup_steps
+    if it < max_steps * stable_ratio:
+        return max_lr
+    decay_steps = max_steps - (max_steps * stable_ratio)
+    it_in_decay = it - (max_steps * stable_ratio)
+    coeff = 0.5 * (1.0 + math.cos(math.pi * it_in_decay / decay_steps))
+    return min_lr + coeff * (max_lr - min_lr)
+
+
 start_step = 0
 if args.resume:
-    start_step, _ = load_checkpoint(
-        args.resume, raw_model, optimizer, device, master_process
-    )
-    start_step += 1
+    if master_process:
+        print(f"Resuming from checkpoint: {args.resume}")
+    checkpoint = torch.load(args.resume, map_location=device)
+    raw_model.load_state_dict(checkpoint["model"])
+    checkpoint_optimizers = checkpoint["optimizer"]
+    if isinstance(checkpoint_optimizers, list) and len(checkpoint_optimizers) == len(
+        optimizer
+    ):
+        for opt, state in zip(optimizer, checkpoint_optimizers):
+            opt.load_state_dict(state)
+    else:
+        if master_process:
+            print(
+                "Warning: Optimizer checkpoint format mismatch. Starting optimizers from scratch."
+            )
+    start_step = checkpoint["step"] + 1
 
 time_start = time.time()
 best_val_loss = float("inf")
@@ -150,18 +174,16 @@ for step in range(start_step, max_steps):
                     step=step,
                 )
 
-            save_checkpoint(
-                f"model_{step:05d}.pt",
-                raw_model,
-                optimizer,
-                step,
-                val_loss_accum.item(),
-            )
+            checkpoint = {
+                "model": raw_model.state_dict(),
+                "optimizer": [opt.state_dict() for opt in optimizer],
+                "step": step,
+                "val_loss": val_loss_accum.item(),
+            }
+            torch.save(checkpoint, f"model_{step:05d}.pt")
             if val_loss_accum.item() < best_val_loss:
                 best_val_loss = val_loss_accum.item()
-                save_checkpoint(
-                    "model_best.pt", raw_model, optimizer, step, val_loss_accum.item()
-                )
+                torch.save(checkpoint, "model_best.pt")
 
     # Training loop
     model.train()
@@ -185,7 +207,7 @@ for step in range(start_step, max_steps):
         dist.all_reduce(loss_accum, op=dist.ReduceOp.AVG)
 
     norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-    lr = get_lr(step, warmup_steps, max_steps, stable_ratio, max_lr, min_lr)
+    lr = get_lr(step)
     for param_group in optimizer[0].param_groups:
         param_group["lr"] = lr * 10
     for param_group in optimizer[1].param_groups:
