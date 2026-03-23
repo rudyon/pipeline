@@ -12,7 +12,8 @@ source .venv/bin/activate
 # download some test data and tokenize it if not already downloaded
 # using test_cache as the test path and max shards of 2 here so it's fast for testing
 if [ ! "$(ls -A test_cache 2>/dev/null)" ]; then
-    python prepare_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT -m 2 --cache test_cache
+    python get_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT --cache test_cache --max-docs 200000
+    python tokenize_data.py --cache test_cache -c text -m 2
 fi
 
 # do a simple test training run of 50 steps. this is meant to be able to run on my i5 10th gen cpu

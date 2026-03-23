@@ -6,7 +6,8 @@ NUM_GPUS=$(nvidia-smi --list-gpus | wc -l)
 echo "Detected $NUM_GPUS GPUs"
 
 if [ ! "$(ls -A test_cache 2>/dev/null)" ]; then
-    python prepare_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT -m 2 --cache test_cache
+    python get_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT --cache test_cache --max-docs 200000
+    python tokenize_data.py --cache test_cache -c text -m 2
 fi
 
 # Default to 300 steps, use 600 if -l/--long flag is present

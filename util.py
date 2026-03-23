@@ -3,6 +3,9 @@ import os
 import numpy as np
 import random
 
+def write_datafile(filename, tokens_np):
+    np.save(filename, tokens_np)
+
 def fmt_elapsed(seconds):
     if seconds < 60:
         return f"{seconds:.2f}s"
