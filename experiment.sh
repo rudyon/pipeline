@@ -17,7 +17,7 @@ echo "Vocab size: $VOCAB_SIZE"
 # Step 1: Download raw data if needed
 if [ ! -d "$RAW_CACHE/fineweb-edu" ] || [ ! "$(ls -A $RAW_CACHE/fineweb-edu 2>/dev/null)" ]; then
     echo "=== Step 1: Downloading raw test data ==="
-    python get_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT -m 2 --cache $RAW_CACHE
+    python get_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT -m 10 --cache $RAW_CACHE
 else
     echo "=== Step 1: Raw data already exists, skipping ==="
 fi
