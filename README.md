@@ -24,7 +24,7 @@ I am trying to improve the architecture over time with experiments. At the time 
 
 ## experiments
 
-I am running experiments on this repository to try and improve the architecture/hyperparameters. The experiments are done by making a change to the codebase and then running `experiment.sh` which does a training run with `steps=300` and `depth=4` on 2 shards of the [HuggingFaceFW/fineweb-edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu) dataset. When the experiment is done it is logged into `experiments.jsonl` and `plot.py` is run to regenerate the graph below. The results of the experiments are kept in the repo going forward if validation BPB dropped compared to the previous best validation BPB.
+I am running experiments on this repository to try and improve the architecture/hyperparameters. The experiments are done by making a change to the codebase and then running `experiment.sh` which does a training run with a time budget of 5 minutes and `depth=4` on 2 shards of the [HuggingFaceFW/fineweb-edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu) dataset. When the experiment is done it is logged into `experiments.jsonl` and `plot.py` is run to regenerate the graph below. The results of the experiments are kept in the repo going forward if validation BPB dropped compared to the previous best validation BPB.
 
 ![experiments graph](experiments.png)
 

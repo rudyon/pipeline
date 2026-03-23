@@ -11,13 +11,14 @@ if [ ! "$(ls -A test_cache 2>/dev/null)" ]; then
     python tokenize_data.py --cache test_cache -c text --tokenizer tokenizer.json -m 2
 fi
 
-STEPS=600
+MINUTES=5
 EXPERIMENT_ARG="--experiment"
 
 # Get experiment name (first argument)
 EXPERIMENT_NAME="$1"
 
-torchrun --standalone --nproc_per_node=$NUM_GPUS train.py $STEPS \
+torchrun --standalone --nproc_per_node=$NUM_GPUS train.py \
+    -m $MINUTES \
     --depth 4 \
     --batch 32768 \
     --micro 4 \

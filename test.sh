@@ -18,4 +18,4 @@ if [ ! "$(ls -A test_cache 2>/dev/null)" ]; then
 fi
 
 # do a simple test training run of 50 steps. this is meant to be able to run on my i5 10th gen cpu
-python train.py 50 -d 1 -b 1024 -m 1 -s 256 --cache test_cache --vocab-size 32768 --tokenizer tokenizer.json
+python train.py -m 0.5 -d 1 -b 1024 -m 1 -s 256 --cache test_cache --vocab-size 32768 --tokenizer tokenizer.json

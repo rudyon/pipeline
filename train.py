@@ -15,7 +15,7 @@ from tokenizers import Tokenizer
 import json
 
 parser = argparse.ArgumentParser()
-parser.add_argument("steps", type=int)
+parser.add_argument("-m", "--minutes", type=float, default=5.0, help="Training time budget in minutes")
 parser.add_argument("-d", "--depth", type=int, default=12)
 parser.add_argument("-b", "--batch", type=int, default=524288)
 parser.add_argument("-m", "--micro", type=int, default=16)
@@ -104,19 +104,27 @@ optimizer = raw_model.configure_optimizers(
     weight_decay=0.1, learning_rate=0.0006, device=device
 )
 
-# Learning rate schedule
+# Time budget setup
+max_minutes = args.minutes
+target_end_time = time.time() + (max_minutes * 60)
+
+# Learning rate schedule (approximate steps based on time)
+# We assume ~250 steps per 5 minutes as a rough baseline for the LR schedule
+estimated_total_steps = int((max_minutes / 5.0) * 250)
+if estimated_total_steps < 100:
+    estimated_total_steps = 100
 max_lr, min_lr = 0.001, 0.00006
-warmup_steps, max_steps = 715, args.steps
+warmup_steps = int(estimated_total_steps * 0.1) # 10% warmup
 stable_ratio = 0.8
 
 
 def get_lr(it):
     if it < warmup_steps:
         return max_lr * (it + 1) / warmup_steps
-    if it < max_steps * stable_ratio:
+    if it < estimated_total_steps * stable_ratio:
         return max_lr
-    decay_steps = max_steps - (max_steps * stable_ratio)
-    it_in_decay = it - (max_steps * stable_ratio)
+    decay_steps = estimated_total_steps - (estimated_total_steps * stable_ratio)
+    it_in_decay = it - (estimated_total_steps * stable_ratio)
     coeff = 0.5 * (1.0 + math.cos(math.pi * it_in_decay / decay_steps))
     return min_lr + coeff * (max_lr - min_lr)
 
@@ -152,9 +160,18 @@ else:
 time_start = time.time()
 best_val_loss = float("inf")
 
-for step in range(start_step, max_steps):
-    t0 = time.time()
-    last_step = step == max_steps - 1
+step = start_step
+while True:
+    current_time = time.time()
+    if current_time >= target_end_time:
+        if master_process:
+            print(f"Time budget of {max_minutes} minutes reached. Stopping training.")
+        break
+
+    t0 = current_time
+    # Force validation on the very last step we run before timeout
+    time_remaining = target_end_time - current_time
+    last_step = time_remaining < 5.0 # if less than 5 seconds left, assume it's the last step
 
     # Validation and Evaluation
     if step != 0 and (step % 250 == 0 or last_step):
@@ -242,10 +259,12 @@ for step in range(start_step, max_steps):
         dt = time.time() - t0
         tokens_per_sec = total_batch_size / dt
         print(
-            f"step {step:4d} | loss: {loss_accum.item():.6f} | dt {dt * 1000:.2f}ms | tok/sec {tokens_per_sec:.2f} | elapsed {fmt_elapsed((time.time() - time_start))}"
+            f"step {step:4d} | loss: {loss_accum.item():.6f} | dt {dt * 1000:.2f}ms | tok/sec {tokens_per_sec:.2f} | elapsed {fmt_elapsed((time.time() - time_start))} | remaining {fmt_elapsed((target_end_time - time.time()))}"
         )
         if args.wandb:
             wandb.log({"train loss": loss_accum.item(), "lr": lr}, step=step)
+            
+    step += 1
 
 if master_process:
     print(f"training took {fmt_elapsed((time.time() - time_start))}")
