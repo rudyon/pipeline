@@ -15,7 +15,7 @@ from tokenizers import Tokenizer
 import json
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-m", "--minutes", type=float, default=5.0, help="Training time budget in minutes")
+parser.add_argument("--minutes", type=float, default=5.0, help="Training time budget in minutes")
 parser.add_argument("-d", "--depth", type=int, default=12)
 parser.add_argument("-b", "--batch", type=int, default=524288)
 parser.add_argument("-m", "--micro", type=int, default=16)

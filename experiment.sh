@@ -18,7 +18,7 @@ EXPERIMENT_ARG="--experiment"
 EXPERIMENT_NAME="$1"
 
 torchrun --standalone --nproc_per_node=$NUM_GPUS train.py \
-    -m $MINUTES \
+    --minutes $MINUTES \
     --depth 4 \
     --batch 32768 \
     --micro 4 \
