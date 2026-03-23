@@ -29,7 +29,7 @@ doc_count = 0
 current_file = None
 writer = None
 
-progress = tqdm(desc="Downloading docs", unit=" docs")
+progress = tqdm(total=args.max_docs, desc="Downloading docs", unit=" docs")
 
 for doc in dataset:
     text = doc[column_name]
