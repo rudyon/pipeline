@@ -116,21 +116,32 @@ class DataLoaderLite:
     def reset(self):
         self.current_shard = 0
         self.tokens = load_tokens(self.shards[self.current_shard])
+        # If data is too small, tile/repeat it to ensure enough tokens
+        min_required = self.B * self.T * self.num_processes + 1
+        if len(self.tokens) < min_required:
+            repeats = (min_required // len(self.tokens)) + 1
+            self.tokens = self.tokens.repeat(repeats)
         # Each process starts at a unique offset
         self.current_position = self.B * self.T * self.process_rank
 
     def next_batch(self):
         B, T = self.B, self.T
-        buf = self.tokens[self.current_position : self.current_position + B * T + 1]
+        # Calculate required tokens for this batch
+        required_tokens = B * T + 1
+
+        # If we're near the end of this shard, wrap around to beginning
+        if self.current_position + required_tokens > len(self.tokens):
+            self.current_position = 0
+            self.current_shard = (self.current_shard + 1) % len(self.shards)
+            self.tokens = load_tokens(self.shards[self.current_shard])
+
+        buf = self.tokens[
+            self.current_position : self.current_position + required_tokens
+        ]
         x = (buf[:-1]).view(B, T)
         y = (buf[1:]).view(B, T)
 
         # Advance by the total tokens processed by the whole GPU fleet
         self.current_position += B * T * self.num_processes
 
-        # If the next jump goes out of bounds, move to the next shard
-        if self.current_position + (B * T * self.num_processes + 1) > len(self.tokens):
-            self.current_shard = (self.current_shard + 1) % len(self.shards)
-            self.tokens = load_tokens(self.shards[self.current_shard])
-            self.current_position = B * T * self.process_rank
         return x, y
