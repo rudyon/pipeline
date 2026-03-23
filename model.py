@@ -269,27 +269,10 @@ class LLM(nn.Module):
             )
         return logits, loss
 
-    def generate(
-        self, prompt, max_new_tokens=20, top_k=50, temperature=1.0, tokenizer=None
-    ):
-        # Import here to avoid circular imports
-        if tokenizer is None:
-            import tiktoken
-
-            tokenizer = tiktoken.get_encoding("gpt2")
-
-        # Check if tiktoken or HF tokenizer
-        if hasattr(tokenizer, "encode_ordinary"):
-            # tiktoken
-            tokens = tokenizer.encode(prompt)
-        else:
-            # HF tokenizer
-            encoding = tokenizer.encode(prompt)
-            if hasattr(encoding, "ids"):
-                tokens = encoding.ids
-            else:
-                tokens = encoding
-
+    def generate(self, prompt, max_new_tokens=20, top_k=50, temperature=1.0, enc=None):
+        if enc is None:
+            enc = tiktoken.get_encoding("gpt2")
+        tokens = enc.encode(prompt)
         x = (
             torch.tensor(tokens, dtype=torch.long)
             .unsqueeze(0)
@@ -305,12 +288,7 @@ class LLM(nn.Module):
                 ix = torch.multinomial(topk_probs, 1)
                 xcol = torch.gather(topk_indices, -1, ix)
                 x = torch.cat((x, xcol), dim=1)
-
-        # Decode
-        if hasattr(tokenizer, "decode"):
-            return tokenizer.decode(x[0].tolist())
-        else:
-            return tokenizer.decode(x[0].tolist())
+        return enc.decode(x[0].tolist())
 
     def configure_optimizers(self, weight_decay, learning_rate, device):
         param_dict = {pn: p for pn, p in self.named_parameters() if p.requires_grad}

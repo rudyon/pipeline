@@ -1,30 +1,13 @@
 import torch
 from datasets import load_dataset
+import tiktoken
 from torch.nn import functional as F
-from util import load_tokenizer
 
+print("loading hellaswag...")
+ds = load_dataset("Rowan/hellaswag", split="validation")
+enc = tiktoken.get_encoding("gpt2")
 
-def encode_text(tokenizer, text):
-    """Encode text with either tiktoken or HF tokenizer."""
-    if hasattr(tokenizer, "encode_ordinary"):
-        # tiktoken
-        return tokenizer.encode(text)
-    else:
-        # HF tokenizer
-        encoding = tokenizer.encode(text)
-        if hasattr(encoding, "ids"):
-            return encoding.ids
-        else:
-            return encoding
-
-
-def get_hellaswag_acc(model, device, tokenizer_or_name="gpt2", limit=200):
-    # Load dataset (do this lazily)
-    ds = load_dataset("Rowan/hellaswag", split="validation", streaming=True)
-
-    # Load tokenizer
-    tokenizer, _ = load_tokenizer(tokenizer_or_name)
-
+def get_hellaswag_acc(model, device, limit=200):
     model.eval()
     correct = 0
     total = 0
@@ -38,22 +21,19 @@ def get_hellaswag_acc(model, device, tokenizer_or_name="gpt2", limit=200):
             losses = []
             for ending in endings:
                 text = ctx + " " + ending
-                tokens = encode_text(tokenizer, text)
-                ctx_tokens = encode_text(tokenizer, ctx + " ")
+                tokens = enc.encode(text)
+                ctx_tokens = enc.encode(ctx + " ")
                 ctx_len = len(ctx_tokens)
                 if len(tokens) > 1024:
                     tokens = tokens[:1024]
                 x = torch.tensor([tokens[:-1]], dtype=torch.long, device=device)
                 y = torch.tensor([tokens[1:]], dtype=torch.long, device=device)
-                with torch.autocast(
-                    device_type=device if device != "mps" else "cpu",
-                    dtype=torch.bfloat16,
-                ):
+                with torch.autocast(device_type=device if device != 'mps' else 'cpu', dtype=torch.bfloat16):
                     logits, _ = model(x)
-                shift_logits = logits[0, ctx_len - 1 :, :]
-                shift_labels = y[0, ctx_len - 1 :]
+                shift_logits = logits[0, ctx_len-1:, :]
+                shift_labels = y[0, ctx_len-1:]
                 if shift_labels.size(0) == 0:
-                    loss = float("inf")
+                    loss = float('inf')
                 else:
                     loss = F.cross_entropy(shift_logits, shift_labels).item()
                 losses.append(loss)
