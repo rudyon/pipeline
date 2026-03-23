@@ -9,7 +9,7 @@ from torch.distributed import init_process_group, destroy_process_group
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from model import LLM, LLMConfig
-from util import DataLoaderLite, fmt_elapsed
+from util import DataLoaderLite, fmt_elapsed, load_tokenizer
 from hellaswag import get_hellaswag_acc
 import json
 
@@ -24,11 +24,17 @@ parser.add_argument("-c", "--cache", default="data_cache")
 parser.add_argument("-r", "--resume", default=None)
 parser.add_argument("-e", "--experiment", default=None)
 parser.add_argument("-el", "--experimentlong", default=None)
+parser.add_argument(
+    "-t",
+    "--tokenizer",
+    default="gpt2",
+    help="Tokenizer: 'gpt2' or path to tokenizer.json",
+)
 args = parser.parse_args()
 
 if args.experimentlong is not None and args.experiment is not None:
     print("can't mix long and short experiment arguments. sorry")
-    os.exit()
+    exit(1)
 
 # manual seed for experimentation only!
 if args.experiment is not None or args.experimentlong is not None:
@@ -88,7 +94,13 @@ val_loader = DataLoaderLite(
 
 torch.set_float32_matmul_precision("high")
 
-model = LLM(LLMConfig(depth=args.depth, vocab_size=50304))
+# Load tokenizer and get vocab_size
+tokenizer, vocab_size = load_tokenizer(args.tokenizer)
+if master_process:
+    print(f"Using tokenizer: {args.tokenizer}")
+    print(f"Vocab size: {vocab_size}")
+
+model = LLM(LLMConfig(depth=args.depth, vocab_size=vocab_size))
 model.to(device)
 if device_type == "cuda":
     model = torch.compile(model)
@@ -163,7 +175,10 @@ for step in range(start_step, max_steps):
 
         if master_process:
             hw_acc = get_hellaswag_acc(
-                raw_model, device, limit=1000 if last_step else 200
+                raw_model,
+                device,
+                tokenizer_or_name=args.tokenizer,
+                limit=1000 if last_step else 200,
             )
             print(
                 f"step {step} | val loss {val_loss_accum.item():.4f} | hellaswag {hw_acc * 100:.2f}%"

@@ -7,3 +7,5 @@ test_cache
 wandb
 model_*.pt
 .ruff_cache
+test_raw_cache
+reports
