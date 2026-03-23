@@ -6,3 +6,4 @@ tqdm
 wandb
 ipykernel
 matplotlib
+tokenizers

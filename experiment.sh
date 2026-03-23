@@ -5,8 +5,20 @@ pip install -r requirements.txt -q
 NUM_GPUS=$(nvidia-smi --list-gpus | wc -l)
 echo "Detected $NUM_GPUS GPUs"
 
+# Train custom tokenizer if it doesn't exist
+if [ ! -f "tokenizer.json" ]; then
+    echo "Training custom tokenizer..."
+    python train_tokenizer.py HuggingFaceFW/fineweb-edu 50000 \
+        -c text -C sample-10BT -v 50304 \
+        -m 100000 --cache test_cache \
+        -o tokenizer.json
+fi
+
+# Prepare data with custom tokenizer
 if [ ! "$(ls -A test_cache 2>/dev/null)" ]; then
-    python prepare_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT -m 2 --cache test_cache
+    python prepare_data.py HuggingFaceFW/fineweb-edu \
+        -c text -C sample-10BT -m 2 --cache test_cache \
+        --tokenizer tokenizer.json
 fi
 
 # Default to 300 steps, use 600 if -l/--long flag is present
@@ -32,4 +44,5 @@ torchrun --standalone --nproc_per_node=$NUM_GPUS train.py $STEPS \
     --batch 32768 \
     --micro 4 \
     --cache test_cache \
+    --vocab-size 50304 \
     $EXPERIMENT_ARG $EXPERIMENT_NAME

@@ -12,9 +12,39 @@ source .venv/bin/activate
 NUM_GPUS=$(nvidia-smi --list-gpus | wc -l)
 echo "Detected $NUM_GPUS GPUs"
 
-if [ ! "$(ls -A data_cache 2>/dev/null)" ]; then
-    python prepare_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT
+# Check if we should use custom tokenizer
+USE_CUSTOM_TOKENIZER=false
+VOCAB_SIZE=50304
+TOKENIZER_ARG=""
+for arg in "$@"; do
+    if [[ "$arg" == "--custom-tokenizer" ]]; then
+        USE_CUSTOM_TOKENIZER=true
+    fi
+done
+
+# Train custom tokenizer if requested and doesn't exist
+if [ "$USE_CUSTOM_TOKENIZER" = true ] && [ ! -f "tokenizer.json" ]; then
+    echo "Training custom tokenizer..."
+    python train_tokenizer.py HuggingFaceFW/fineweb-edu 50000 \
+        -c text -C sample-10BT -v 50304 \
+        -o tokenizer.json
 fi
+
+if [ ! "$(ls -A data_cache 2>/dev/null)" ]; then
+    if [ "$USE_CUSTOM_TOKENIZER" = true ]; then
+        TOKENIZER_ARG="--tokenizer tokenizer.json"
+    fi
+    python prepare_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT $TOKENIZER_ARG
+fi
+
+# Get wandb name (non-flag argument)
+WANDB_NAME=""
+for arg in "$@"; do
+    if [[ "$arg" != "--custom-tokenizer" ]]; then
+        WANDB_NAME="$arg"
+        break
+    fi
+done
 
 # Run with torchrun
 # --standalone: single-node multi-gpu
@@ -22,4 +52,5 @@ fi
 torchrun --standalone --nproc_per_node=$NUM_GPUS train.py 19073 \
     --batch 524288 \
     --micro 16 \
-    --wandb $1
+    --vocab-size $VOCAB_SIZE \
+    --wandb "$WANDB_NAME"
