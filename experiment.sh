@@ -14,20 +14,9 @@ fi
 # Default to 300 steps, use 600 if -l/--long flag is present
 STEPS=300
 EXPERIMENT_ARG="--experiment"
-if [[ "$*" == *"-l"* ]] || [[ "$*" == *"--long"* ]]; then
-    STEPS=600
-    EXPERIMENT_ARG="--experimentlong"
-    echo "Running long experiment: 600 steps"
-fi
 
-# Get experiment name (first non-flag argument)
-EXPERIMENT_NAME=""
-for arg in "$@"; do
-    if [[ "$arg" != "-l" ]] && [[ "$arg" != "--long" ]]; then
-        EXPERIMENT_NAME="$arg"
-        break
-    fi
-done
+# Get experiment name (first argument)
+EXPERIMENT_NAME="$1"
 
 torchrun --standalone --nproc_per_node=$NUM_GPUS train.py $STEPS \
     --depth 4 \

@@ -24,7 +24,6 @@ parser.add_argument("-w", "--wandb", default=None)
 parser.add_argument("-c", "--cache", default="data_cache")
 parser.add_argument("-r", "--resume", default=None)
 parser.add_argument("-e", "--experiment", default=None)
-parser.add_argument("-el", "--experimentlong", default=None)
 parser.add_argument("-v", "--vocab-size", type=int, default=32768)
 parser.add_argument("-t", "--tokenizer", default="tokenizer.json", help="path to tokenizer.json")
 args = parser.parse_args()
@@ -32,12 +31,8 @@ args = parser.parse_args()
 # load tokenizer for hellaswag eval
 tokenizer = Tokenizer.from_file(args.tokenizer)
 
-if args.experimentlong is not None and args.experiment is not None:
-    print("can't mix long and short experiment arguments. sorry")
-    os.exit()
-
 # manual seed for experimentation only!
-if args.experiment is not None or args.experimentlong is not None:
+if args.experiment is not None:
     torch.manual_seed(42)
 
 # Setup DDP
@@ -145,6 +140,15 @@ if args.resume:
             )
     start_step = checkpoint["step"] + 1
 
+# Read bytes_per_token from cache (saved by tokenize_data.py)
+bytes_per_token_path = os.path.join(args.cache, "bytes_per_token.txt")
+if os.path.exists(bytes_per_token_path):
+    with open(bytes_per_token_path, "r") as f:
+        bytes_per_token = float(f.read().strip())
+else:
+    print(f"Warning: {bytes_per_token_path} not found. BPB will not be calculated correctly. Using 1.0 fallback.")
+    bytes_per_token = 1.0
+
 time_start = time.time()
 best_val_loss = float("inf")
 
@@ -173,12 +177,18 @@ for step in range(start_step, max_steps):
             hw_acc = get_hellaswag_acc(
                 raw_model, device, tokenizer, limit=1000 if last_step else 200
             )
+            val_loss_scalar = val_loss_accum.item()
+            val_bpb = val_loss_scalar / (math.log(2) * bytes_per_token)
             print(
-                f"step {step} | val loss {val_loss_accum.item():.4f} | hellaswag {hw_acc * 100:.2f}%"
+                f"step {step} | val loss {val_loss_scalar:.4f} | val bpb {val_bpb:.4f} | hellaswag {hw_acc * 100:.2f}%"
             )
             if args.wandb:
                 wandb.log(
-                    {"val loss": val_loss_accum.item(), "hellaswag": hw_acc * 100},
+                    {
+                        "val loss": val_loss_scalar,
+                        "val bpb": val_bpb,
+                        "hellaswag": hw_acc * 100
+                    },
                     step=step,
                 )
 
@@ -186,7 +196,8 @@ for step in range(start_step, max_steps):
                 "model": raw_model.state_dict(),
                 "optimizer": [opt.state_dict() for opt in optimizer],
                 "step": step,
-                "val_loss": val_loss_accum.item(),
+                "val_loss": val_loss_scalar,
+                "val_bpb": val_bpb,
             }
             torch.save(checkpoint, f"model_{step:05d}.pt")
             if val_loss_accum.item() < best_val_loss:
@@ -244,27 +255,13 @@ if master_process:
             if os.path.exists("experiments.jsonl")
             else 0,
             "name": args.experiment,
-            "val_loss": val_loss_accum.item(),
+            "val_bpb": val_loss_accum.item() / (math.log(2) * bytes_per_token),
             "kept": None,  # filled in manually later
         }
         with open("experiments.jsonl", "a") as f:
             f.write("\n" + json.dumps(result))
         print(
-            f"logged experiment '{args.experiment}' with val loss {val_loss_accum.item():.4f}"
-        )
-    elif args.experimentlong:
-        result = {
-            "id": len(open("experiments_long.jsonl").readlines())
-            if os.path.exists("experiments_long.jsonl")
-            else 0,
-            "name": args.experimentlong,
-            "val_loss": val_loss_accum.item(),
-            "kept": None,  # filled in manually later
-        }
-        with open("experiments_long.jsonl", "a") as f:
-            f.write("\n" + json.dumps(result))
-        print(
-            f"logged experimentlong '{args.experimentlong}' with val loss {val_loss_accum.item():.4f}"
+            f"logged experiment '{args.experiment}' with val bpb {result['val_bpb']:.4f}"
         )
 
 

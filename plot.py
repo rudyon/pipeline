@@ -19,13 +19,16 @@ def plot_experiments(jsonl_file, output_file, title_prefix):
         return False
 
     ids = [e["id"] for e in experiments]
-    losses = [e["val_loss"] for e in experiments]
+    losses = [e["val_bpb"] for e in experiments if "val_bpb" in e]
+    if not losses:
+        # Fallback to val_loss if val_bpb not present
+        losses = [e["val_loss"] for e in experiments]
     kept = [e for e in experiments if e["kept"]]
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.scatter(ids, losses, color="gray", alpha=0.3, label="Discarded", s=10)
     if kept:
         kept_ids = [e["id"] for e in kept]
-        kept_losses = [e["val_loss"] for e in kept]
+        kept_losses = [e.get("val_bpb", e.get("val_loss")) for e in kept]
         ax.scatter(
             kept_ids,
             kept_losses,
@@ -47,7 +50,7 @@ def plot_experiments(jsonl_file, output_file, title_prefix):
         for e in kept:
             ax.annotate(
                 e["name"],
-                (e["id"], e["val_loss"]),
+                (e["id"], e.get("val_bpb", e.get("val_loss"))),
                 textcoords="offset points",
                 xytext=(0, 5),
                 fontsize=8,
@@ -59,7 +62,7 @@ def plot_experiments(jsonl_file, output_file, title_prefix):
 
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.set_xlabel("Experiment #")
-    ax.set_ylabel("Validation Loss (lower is better)")
+    ax.set_ylabel("Validation BPB (lower is better)")
     ax.set_title(
         f"{title_prefix}: {len(experiments)} Experiments, {len(kept)} Kept Improvments"
     )
@@ -76,9 +79,4 @@ def plot_experiments(jsonl_file, output_file, title_prefix):
 # Plot regular experiments (300 steps)
 plot_experiments(
     "experiments.jsonl", "experiments.png", "Research Progress (300 steps)"
-)
-
-# Plot long experiments (600 steps)
-plot_experiments(
-    "experiments_long.jsonl", "experiments_long.png", "Research Progress (600 steps)"
 )

@@ -53,6 +53,8 @@ def tokenize_doc(text):
 shard_index = 0
 all_tokens_np = np.empty((shard_size,), dtype=token_dtype)
 token_count = 0
+total_bytes = 0
+total_tokens = 0
 progress_bar = None
 done = False
 
@@ -69,6 +71,9 @@ for path in raw_files:
             tokens = tokenize_doc(text)
             if len(tokens) == 0:
                 continue
+
+            total_bytes += len(text.encode('utf-8'))
+            total_tokens += len(tokens)
 
             if token_count + len(tokens) < shard_size:
                 all_tokens_np[token_count:token_count+len(tokens)] = tokens
@@ -98,3 +103,10 @@ if not done and token_count != 0:
     split = "val" if shard_index == 0 else "train"
     filename = os.path.join(DATA_CACHE_DIR, f"{dataset_name}_{split}_{shard_index:06d}")
     write_datafile(filename, all_tokens_np[:token_count])
+
+if total_tokens > 0:
+    bytes_per_token = total_bytes / total_tokens
+    bpt_path = os.path.join(DATA_CACHE_DIR, "bytes_per_token.txt")
+    with open(bpt_path, "w") as f:
+        f.write(f"{bytes_per_token:.6f}")
+    print(f"Calculated {bytes_per_token:.4f} bytes/token over {total_tokens} tokens. Saved to {bpt_path}")
