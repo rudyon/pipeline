@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from dataclasses import dataclass
 import torch.nn.functional as F
-import tiktoken
 
 
 def apply_rotary_pos_emb(q, k, cos, sin):
@@ -270,9 +269,8 @@ class LLM(nn.Module):
         return logits, loss
 
     def generate(self, prompt, max_new_tokens=20, top_k=50, temperature=1.0, enc=None):
-        if enc is None:
-            enc = tiktoken.get_encoding("gpt2")
-        tokens = enc.encode(prompt)
+        assert enc is not None, "A tokenizer must be provided to generate()"
+        tokens = enc.encode(prompt).ids
         x = (
             torch.tensor(tokens, dtype=torch.long)
             .unsqueeze(0)

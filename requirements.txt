@@ -1,8 +1,8 @@
 torch
-tiktoken
 datasets
 numpy
 tqdm
 wandb
 ipykernel
 matplotlib
+tokenizers

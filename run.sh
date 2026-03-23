@@ -14,7 +14,8 @@ echo "Detected $NUM_GPUS GPUs"
 
 if [ ! "$(ls -A data_cache 2>/dev/null)" ]; then
     python get_data.py HuggingFaceFW/fineweb-edu -c text -C sample-10BT --cache data_cache
-    python tokenize_data.py --cache data_cache -c text
+    python train_tokenizer.py --cache data_cache -c text --vocab-size 32768
+    python tokenize_data.py --cache data_cache -c text --tokenizer tokenizer.json
 fi
 
 # Run with torchrun
@@ -23,4 +24,6 @@ fi
 torchrun --standalone --nproc_per_node=$NUM_GPUS train.py 19073 \
     --batch 524288 \
     --micro 16 \
+    --vocab-size 32768 \
+    --tokenizer tokenizer.json \
     --wandb $1

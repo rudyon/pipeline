@@ -1,4 +1,4 @@
-import tiktoken
+from tokenizers import Tokenizer
 import numpy as np
 import os
 import json
@@ -13,7 +13,7 @@ parser.add_argument('--cache', default="data_cache")
 parser.add_argument('-c', '--column', default="text")
 parser.add_argument('-s', '--shard-size', type=int, default=100000000)
 parser.add_argument('-m', '--max-shards', type=int, default=None)
-parser.add_argument('--tokenizer', default="gpt2", help="tiktoken encoding name (default: gpt2)")
+parser.add_argument('--tokenizer', default="tokenizer.json", help="path to tokenizer.json")
 args = parser.parse_args()
 
 DATA_CACHE_DIR = os.path.join(os.path.dirname(__file__), args.cache)
@@ -28,20 +28,30 @@ assert len(raw_files) > 0, f"No raw JSONL files found in {DATA_CACHE_DIR}. Run g
 basename = os.path.basename(raw_files[0])
 dataset_name = basename.rsplit("_raw_", 1)[0]
 
-enc = tiktoken.get_encoding(args.tokenizer)
-eot = enc._special_tokens[chr(60) + "|endoftext|" + chr(62)]
+# load HF tokenizer
+enc = Tokenizer.from_file(args.tokenizer)
+eot_token_str = chr(60) + "|endoftext|" + chr(62)
+eot = enc.token_to_id(eot_token_str)
+assert eot is not None, f"EOT token {eot_token_str} not found in tokenizer"
+vocab_size = enc.get_vocab_size()
+print(f"Loaded tokenizer from {args.tokenizer} (vocab size: {vocab_size})")
+
+# determine dtype based on vocab size
+if vocab_size < 2**16:
+    token_dtype = np.uint16
+else:
+    token_dtype = np.uint32
 
 def tokenize_doc(text):
     if not text:
-        return np.array([], dtype=np.uint16)
-    tokens = [eot]
-    tokens.extend(enc.encode_ordinary(text))
-    tokens_np = np.array(tokens)
-    assert (0 <= tokens_np).all() and (tokens_np < 2**16).all()
-    return tokens_np.astype(np.uint16)
+        return np.array([], dtype=token_dtype)
+    encoded = enc.encode(text)
+    tokens = [eot] + encoded.ids
+    tokens_np = np.array(tokens, dtype=token_dtype)
+    return tokens_np
 
 shard_index = 0
-all_tokens_np = np.empty((shard_size,), dtype=np.uint16)
+all_tokens_np = np.empty((shard_size,), dtype=token_dtype)
 token_count = 0
 progress_bar = None
 done = False
@@ -80,7 +90,7 @@ for path in raw_files:
                     done = True
                     break
                 leftover = tokens[remainder:]
-                all_tokens_np = np.empty((shard_size,), dtype=np.uint16)
+                all_tokens_np = np.empty((shard_size,), dtype=token_dtype)
                 all_tokens_np[0:len(leftover)] = leftover
                 token_count = len(leftover)
 

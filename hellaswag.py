@@ -1,13 +1,11 @@
 import torch
 from datasets import load_dataset
-import tiktoken
 from torch.nn import functional as F
 
 print("loading hellaswag...")
 ds = load_dataset("Rowan/hellaswag", split="validation")
-enc = tiktoken.get_encoding("gpt2")
 
-def get_hellaswag_acc(model, device, limit=200):
+def get_hellaswag_acc(model, device, tokenizer, limit=200):
     model.eval()
     correct = 0
     total = 0
@@ -21,8 +19,8 @@ def get_hellaswag_acc(model, device, limit=200):
             losses = []
             for ending in endings:
                 text = ctx + " " + ending
-                tokens = enc.encode(text)
-                ctx_tokens = enc.encode(ctx + " ")
+                tokens = tokenizer.encode(text).ids
+                ctx_tokens = tokenizer.encode(ctx + " ").ids
                 ctx_len = len(ctx_tokens)
                 if len(tokens) > 1024:
                     tokens = tokens[:1024]

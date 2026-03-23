@@ -11,6 +11,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from model import LLM, LLMConfig
 from util import DataLoaderLite, fmt_elapsed
 from hellaswag import get_hellaswag_acc
+from tokenizers import Tokenizer
 import json
 
 parser = argparse.ArgumentParser()
@@ -24,7 +25,12 @@ parser.add_argument("-c", "--cache", default="data_cache")
 parser.add_argument("-r", "--resume", default=None)
 parser.add_argument("-e", "--experiment", default=None)
 parser.add_argument("-el", "--experimentlong", default=None)
+parser.add_argument("-v", "--vocab-size", type=int, default=32768)
+parser.add_argument("-t", "--tokenizer", default="tokenizer.json", help="path to tokenizer.json")
 args = parser.parse_args()
+
+# load tokenizer for hellaswag eval
+tokenizer = Tokenizer.from_file(args.tokenizer)
 
 if args.experimentlong is not None and args.experiment is not None:
     print("can't mix long and short experiment arguments. sorry")
@@ -88,7 +94,9 @@ val_loader = DataLoaderLite(
 
 torch.set_float32_matmul_precision("high")
 
-model = LLM(LLMConfig(depth=args.depth, vocab_size=50304))
+# round vocab_size up to nearest multiple of 64 for GPU efficiency
+padded_vocab_size = ((args.vocab_size + 63) // 64) * 64
+model = LLM(LLMConfig(depth=args.depth, vocab_size=padded_vocab_size))
 model.to(device)
 if device_type == "cuda":
     model = torch.compile(model)
@@ -163,7 +171,7 @@ for step in range(start_step, max_steps):
 
         if master_process:
             hw_acc = get_hellaswag_acc(
-                raw_model, device, limit=1000 if last_step else 200
+                raw_model, device, tokenizer, limit=1000 if last_step else 200
             )
             print(
                 f"step {step} | val loss {val_loss_accum.item():.4f} | hellaswag {hw_acc * 100:.2f}%"
