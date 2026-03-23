@@ -21,7 +21,7 @@ fi
 # Run with torchrun
 # --standalone: single-node multi-gpu
 # --nproc_per_node: uses all detected GPUs
-torchrun --standalone --nproc_per_node=$NUM_GPUS train.py --minutes 1440 \
+torchrun --standalone --nproc_per_node=$NUM_GPUS train.py --steps 19073 \
     --batch 524288 \
     --micro 16 \
     --vocab-size 32768 \
