@@ -35,7 +35,25 @@ if [ ! -d "test_cache" ] || [ ! "$(ls -A test_cache 2>/dev/null)" ]; then
     echo "=== Step 3: Tokenizing test data ==="
     python tokenize_data.py $RAW_CACHE/fineweb-edu $TOKENIZER --cache test_cache -s 1000000
 else
-    echo "=== Step 3: Tokenized data already exists, skipping ==="
+    # Check if tokenized data is large enough
+    TOTAL_TOKENS=$(python3 -c "
+import os
+import numpy as np
+total = 0
+for f in os.listdir('test_cache'):
+    if f.endswith('.npy'):
+        tokens = np.load(os.path.join('test_cache', f))
+        total += len(tokens)
+print(total)
+" 2>/dev/null || echo "0")
+    
+    if [ "$TOTAL_TOKENS" -lt "10000" ]; then
+        echo "=== Step 3: Tokenized data too small ($TOTAL_TOKENS tokens), re-tokenizing ==="
+        rm -rf test_cache
+        python tokenize_data.py $RAW_CACHE/fineweb-edu $TOKENIZER --cache test_cache -s 1000000
+    else
+        echo "=== Step 3: Tokenized data exists ($TOTAL_TOKENS tokens), skipping ==="
+    fi
 fi
 
 # Default to 300 steps, use 600 if -l/--long flag is present
