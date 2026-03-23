@@ -78,5 +78,5 @@ def plot_experiments(jsonl_file, output_file, title_prefix):
 
 # Plot regular experiments (300 steps)
 plot_experiments(
-    "experiments.jsonl", "experiments.png", "Research Progress (300 steps)"
+    "experiments.jsonl", "experiments.png", "Research Progress"
 )
