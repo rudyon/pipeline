@@ -11,8 +11,7 @@ if [ ! "$(ls -A test_cache 2>/dev/null)" ]; then
     python tokenize_data.py --cache test_cache -c text --tokenizer tokenizer.json -m 2
 fi
 
-# Default to 300 steps, use 600 if -l/--long flag is present
-STEPS=300
+STEPS=600
 EXPERIMENT_ARG="--experiment"
 
 # Get experiment name (first argument)
