@@ -8,6 +8,8 @@ uv pip install -r requirements.txt
 # activate venv
 source .venv/bin/activate
 
+export OMP_NUM_THREADS=1
+
 # Detect number of GPUs
 NUM_GPUS=$(nvidia-smi --list-gpus | wc -l)
 echo "Detected $NUM_GPUS GPUs"

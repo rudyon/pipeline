@@ -2,6 +2,8 @@
 # this is designed to run on Kaggle
 pip install -r requirements.txt -q
 
+export OMP_NUM_THREADS=1
+
 NUM_GPUS=$(nvidia-smi --list-gpus | wc -l)
 echo "Detected $NUM_GPUS GPUs"
 
