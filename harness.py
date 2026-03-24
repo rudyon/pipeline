@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from lm_eval.api.model import LM
-from lm_eval import simple_evaluate
+from lm_eval import evaluator, tasks
 
 class PipelineLM(LM):
     def __init__(self, model, tokenizer, device="cuda"):
@@ -61,15 +61,26 @@ class PipelineLM(LM):
     def device(self):
         return self._device
 
-def evaluate_model(model, tokenizer, device, tasks=["hellaswag"], limit=None):
-    lm = PipelineLM(model, tokenizer, device)
-    results = simple_evaluate(
-        model=lm,
-        tasks=tasks,
-        limit=limit,
-    )
-    if results is not None and "results" in results:
-        task_name = tasks[0]
-        if task_name in results["results"]:
-            return results["results"][task_name].get("acc,none", 0.0)
-    return 0.0
+class FastEvaluator:
+    def __init__(self, tasks_list=["hellaswag"]):
+        self.tasks_list = tasks_list
+        # Disable huggingface datasets progress bars so they don't spam the console if they do re-run
+        import datasets
+        datasets.disable_progress_bar()
+        
+        # Load and map the tasks exactly once
+        self.task_manager = tasks.TaskManager()
+        self.task_dict = tasks.get_task_dict(self.tasks_list, task_manager=self.task_manager)
+        
+    def evaluate(self, model, tokenizer, device, limit=None):
+        lm = PipelineLM(model, tokenizer, device)
+        results = evaluator.evaluate(
+            lm=lm,
+            task_dict=self.task_dict,
+            limit=limit,
+        )
+        if results is not None and "results" in results:
+            task_name = self.tasks_list[0]
+            if task_name in results["results"]:
+                return results["results"][task_name].get("acc,none", 0.0)
+        return 0.0

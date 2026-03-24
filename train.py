@@ -10,7 +10,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from model import LLM, LLMConfig
 from util import DataLoaderLite, fmt_elapsed
-from harness import evaluate_model
+from harness import FastEvaluator
 from tokenizers import Tokenizer
 import json
 
@@ -167,6 +167,9 @@ else:
     print(f"Warning: {bytes_per_token_path} not found. BPB will not be calculated correctly. Using 1.0 fallback.")
     bytes_per_token = 1.0
 
+# Initialize evaluator before starting the timer (caches dataset mapping)
+evaluator = FastEvaluator(tasks_list=["hellaswag"]) if master_process else None
+
 time_start = time.time()
 best_val_loss = float("inf")
 
@@ -209,8 +212,8 @@ while True:
             dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
 
         if master_process:
-            hw_acc = evaluate_model(
-                raw_model, tokenizer, device, tasks=["hellaswag"], limit=3000 if last_step else 200
+            hw_acc = evaluator.evaluate(
+                raw_model, tokenizer, device, limit=3000 if last_step else 200
             )
             val_loss_scalar = val_loss_accum.item()
             val_bpb = val_loss_scalar / (math.log(2) * bytes_per_token)
