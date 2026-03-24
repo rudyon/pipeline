@@ -10,6 +10,8 @@ The old version of this repository (when it was using a GPT-2 style architecture
 
 ## architecture
 
+![architecture diagram](architecture.png)
+
 The model uses a single `depth` parameter to scale everything, this was inspired by [nanochat](https://github.com/karpathy/nanochat).
 
 I am trying to improve the architecture over time with experiments. At the time of writing the architecture is as follows:
