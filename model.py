@@ -221,7 +221,7 @@ class LLMConfig:
 
 
 class ConfidenceProbe(nn.Module):
-    """Lightweight MLP probe on the residual stream → scalar confidence in [0, 1].
+    """Lightweight MLP probe on the residual stream → raw scalar logits.
     Trained to predict whether the model's top-1 next-token prediction is correct."""
 
     def __init__(self, n_embd: int, hidden: int = 64):
@@ -230,7 +230,7 @@ class ConfidenceProbe(nn.Module):
             nn.Linear(n_embd, hidden, bias=False),
             nn.GELU(),
             nn.Linear(hidden, 1, bias=True),
-            nn.Sigmoid(),
+            # Removed Sigmoid here to allow BCEWithLogitsLoss (safe for autocast)
         )
 
     def forward(self, x):
@@ -307,9 +307,9 @@ class LLM(nn.Module):
                     correct = (top1 == targets).float()  # (B, T)
 
                 probe_bce = torch.tensor(0.0, device=idx.device)
-                for p_scores in probe_outputs:
-                    probe_bce = probe_bce + F.binary_cross_entropy(
-                        p_scores, correct, reduction="mean"
+                for p_logits in probe_outputs:
+                    probe_bce = probe_bce + F.binary_cross_entropy_with_logits(
+                        p_logits, correct, reduction="mean"
                     )
                 probe_aux_loss_val = probe_bce / len(probe_outputs)
 
@@ -318,9 +318,10 @@ class LLM(nn.Module):
             loss = ce_loss + moe_aux + probe_aux
 
         if return_probe_scores:
-            # Average across all probes → (B, T) mean confidence
+            # Average across all probes and apply sigmoid → (B, T) mean confidence in [0, 1]
             if probe_outputs:
-                avg_probe = torch.stack(probe_outputs, dim=0).mean(dim=0)
+                avg_probe_logits = torch.stack(probe_outputs, dim=0).mean(dim=0)
+                avg_probe = torch.sigmoid(avg_probe_logits)
             else:
                 avg_probe = torch.zeros(B, T, device=idx.device)
             return logits, loss, avg_probe, probe_aux_loss_val
