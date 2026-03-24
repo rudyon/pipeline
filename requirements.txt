@@ -6,3 +6,4 @@ wandb
 ipykernel
 matplotlib
 tokenizers
+lm_eval

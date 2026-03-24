@@ -38,6 +38,7 @@ class MoE(nn.Module):
         self.n_active_experts = config.n_active_experts
         self.router = nn.Linear(config.n_embd, config.n_experts, bias=False)
         self.experts = nn.ModuleList([MLP(config) for _ in range(config.n_experts)])
+        self.shared_expert = MLP(config)
 
     def forward(self, x):
         B, T, C = x.size()
@@ -84,8 +85,11 @@ class MoE(nn.Module):
             .view(B * T, self.n_active_experts, C)
             .sum(dim=1)
         )
+        
+        # add shared expert
+        out = out.view(B, T, C) + self.shared_expert(x)
 
-        return out.view(B, T, C), aux_loss
+        return out, aux_loss
 
 
 class RMSNorm(nn.Module):
