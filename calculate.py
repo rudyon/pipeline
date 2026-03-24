@@ -50,7 +50,7 @@ except Exception as e:
 # vram_gb: total VRAM across all GPUs in a single node (GB)
 # cost_per_hour: USD/hour for the entire node
 COMPUTE_RESOURCES = {
-    "A1000 (Prime Intellect)": {
+    "A100 (Prime Intellect)": {
         "tflops": 312.0,
         "vram_gb": 80,
         "cost_per_hour": 1.23,
