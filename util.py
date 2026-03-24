@@ -62,3 +62,14 @@ class DataLoaderLite:
             self.tokens = load_tokens(self.shards[self.current_shard])
             self.current_position = B * T * self.process_rank
         return x, y
+
+    def state_dict(self):
+        return {
+            "current_shard": self.current_shard,
+            "current_position": self.current_position
+        }
+
+    def load_state_dict(self, state):
+        self.current_shard = state.get("current_shard", 0)
+        self.current_position = state.get("current_position", self.B * self.T * self.process_rank)
+        self.tokens = load_tokens(self.shards[self.current_shard])

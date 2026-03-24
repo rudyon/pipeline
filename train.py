@@ -10,7 +10,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from model import LLM, LLMConfig
 from util import DataLoaderLite, fmt_elapsed
-from hellaswag import get_hellaswag_acc
+from harness import evaluate_model
 from tokenizers import Tokenizer
 import json
 
@@ -152,6 +152,10 @@ if args.resume:
             print(
                 "Warning: Optimizer checkpoint format mismatch. Starting optimizers from scratch."
             )
+    if "train_loader" in checkpoint:
+        train_loader.load_state_dict(checkpoint["train_loader"])
+    if "val_loader" in checkpoint:
+        val_loader.load_state_dict(checkpoint["val_loader"])
     start_step = checkpoint["step"] + 1
 
 # Read bytes_per_token from cache (saved by tokenize_data.py)
@@ -205,8 +209,8 @@ while True:
             dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
 
         if master_process:
-            hw_acc = get_hellaswag_acc(
-                raw_model, device, tokenizer, limit=1000 if last_step else 200
+            hw_acc = evaluate_model(
+                raw_model, tokenizer, device, tasks=["hellaswag"], limit=3000 if last_step else 200
             )
             val_loss_scalar = val_loss_accum.item()
             val_bpb = val_loss_scalar / (math.log(2) * bytes_per_token)
@@ -229,6 +233,8 @@ while True:
                 "step": step,
                 "val_loss": val_loss_scalar,
                 "val_bpb": val_bpb,
+                "train_loader": train_loader.state_dict(),
+                "val_loader": val_loader.state_dict(),
             }
             torch.save(checkpoint, f"model_{step:05d}.pt")
             if val_loss_accum.item() < best_val_loss:

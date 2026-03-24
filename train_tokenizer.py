@@ -33,8 +33,8 @@ def text_iterator():
 
 tokenizer = ByteLevelBPETokenizer()
 
-EOT = chr(60) + "|endoftext|" + chr(62)
-PAD = chr(60) + "|padding|" + chr(62)
+EOT = "<|endoftext|>"
+PAD = "<|padding|>"
 
 tokenizer.train_from_iterator(
     text_iterator(),
