@@ -65,6 +65,11 @@ COMPUTE_RESOURCES = {
         "vram_gb": 80,
         "cost_per_hour": 2.43,
     },
+    "RTX4090x2 (Prime Intellect)": {
+        "tflops": 82.6 * 2,
+        "vram_gb": 24 * 2,
+        "cost_per_hour": 1.23,
+    }
 }
 
 # --- Model / training configuration ---
