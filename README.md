@@ -1,5 +1,7 @@
 # pipeline
 
+![training feasibility graphs](results.png)
+
 LLM training pipeline built for learning ML and experimenting with architectures and hyperparameters. Started after I quit my English Lit degree to focus on self-learning ML/AI full time. The goal is to train somewhat unique LLMs from scratch, with the compute budget limited to what I can personally afford, which isn't much, but I try.
 
 ## model
