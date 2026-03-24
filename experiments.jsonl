@@ -1,2 +1,3 @@
 {"id": 0, "name": "baseline", "val_bpb": 1.7763897420778192, "kept": true}
 {"id": 1, "name": "untie_embeddings", "val_bpb": 1.8621890289792156, "kept": false}
+{"id": 2, "name": "shared_expert_moe", "val_bpb": 1.7849674132500117, "kept": false}
