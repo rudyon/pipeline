@@ -1,0 +1,21 @@
+{
+  "model_type": "linnet",
+  "architectures": [
+    "LLM"
+  ],
+  "depth": 12,
+  "block_size": 1024,
+  "vocab_size": 32768,
+  "n_experts": 8,
+  "n_active_experts": 2,
+  "rope_base": 50000,
+  "attention": "GQA+QKNorm+FlashAttention",
+  "ffn": "SwiGLU",
+  "normalization": "RMSNorm",
+  "sequence_mixing": "CausalDepthwiseConv1d_kernel3",
+  "sparsity": "MoE_top2_of_8",
+  "optimizer": "Muon+AdamW",
+  "torch_dtype": "bfloat16",
+  "transformers_version": "n/a",
+  "pipeline_tag": "text-generation"
+}
