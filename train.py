@@ -188,18 +188,41 @@ while True:
     t0 = current_time
 
     # Validation and Evaluation
-    if step != 0 and (step % 250 == 0 or last_step):
+    if step != 0 and (step % 50 == 0 or last_step):
         model.eval()
         val_loader.reset()
         val_loss_accum = torch.zeros(1, device=device)
         val_loss_steps = 20
+
+        # Accumulators for probe diagnostics
+        all_probe_scores = []   # list of (B*T,) tensors
+        all_top1_correct = []   # list of (B*T,) bool tensors
+        all_token_nll = []      # list of (B*T,) per-token NLL tensors
+        probe_aux_accum = 0.0
+
         with torch.no_grad():
             for _ in range(val_loss_steps):
                 x, y = val_loader.next_batch()
                 x, y = x.to(device), y.to(device)
                 with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
-                    logits, loss = model(x, y)
+                    logits, loss, probe_scores, probe_aux = raw_model(x, y, return_probe_scores=True)
+
                 val_loss_accum += loss / val_loss_steps
+                probe_aux_accum += probe_aux.item() / val_loss_steps
+
+                # Per-token NLL (no reduction)
+                token_nll = F.cross_entropy(
+                    logits.view(-1, logits.size(-1)),
+                    y.view(-1),
+                    reduction="none",
+                )  # (B*T,)
+
+                top1 = logits.argmax(dim=-1).view(-1)   # (B*T,)
+                correct = (top1 == y.view(-1)).float()  # (B*T,)
+
+                all_probe_scores.append(probe_scores.view(-1).float().cpu())
+                all_top1_correct.append(correct.cpu())
+                all_token_nll.append(token_nll.float().cpu())
 
         if ddp:
             dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
@@ -210,18 +233,73 @@ while True:
             )
             val_loss_scalar = val_loss_accum.item()
             val_bpb = val_loss_scalar / (math.log(2) * bytes_per_token)
+
+            # ---- Probe diagnostics ----
+            scores_cat = torch.cat(all_probe_scores)        # (N,)
+            correct_cat = torch.cat(all_top1_correct)       # (N,)
+            nll_cat = torch.cat(all_token_nll)              # (N,)
+
+            probe_mean = scores_cat.mean().item()
+            probe_variance = scores_cat.var().item()
+
+            # Pearson correlation between probe confidence and top-1 accuracy
+            s_z = scores_cat - scores_cat.mean()
+            c_z = correct_cat - correct_cat.mean()
+            denom = (s_z.std() * c_z.std() + 1e-8)
+            probe_acc_corr = ((s_z * c_z).mean() / denom).item()
+
+            # BPB per confidence bin (low < 0.33 ≤ mid < 0.67 ≤ high)
+            log2e = 1.0 / math.log(2)
+            def bin_bpb(mask):
+                if mask.sum() == 0:
+                    return float("nan")
+                return (nll_cat[mask].mean().item() * log2e) / bytes_per_token
+
+            low_mask  = scores_cat < 0.33
+            mid_mask  = (scores_cat >= 0.33) & (scores_cat < 0.67)
+            high_mask = scores_cat >= 0.67
+
+            bpb_by_confidence = {
+                "low":  bin_bpb(low_mask),
+                "mid":  bin_bpb(mid_mask),
+                "high": bin_bpb(high_mask),
+            }
+            # ---- End probe diagnostics ----
+
             print(
                 f"step {step} | val loss {val_loss_scalar:.4f} | val bpb {val_bpb:.4f} | hellaswag {hw_acc * 100:.2f}%"
+                f" | probe_mean {probe_mean:.3f} | probe_var {probe_variance:.3f} | probe_corr {probe_acc_corr:.3f}"
             )
             if args.wandb:
                 wandb.log(
                     {
                         "val loss": val_loss_scalar,
                         "val bpb": val_bpb,
-                        "hellaswag": hw_acc * 100
+                        "hellaswag": hw_acc * 100,
+                        "probe_mean": probe_mean,
+                        "probe_variance": probe_variance,
+                        "probe_aux_loss": probe_aux_accum,
+                        "probe_acc_corr": probe_acc_corr,
+                        "bpb_low": bpb_by_confidence["low"],
+                        "bpb_mid": bpb_by_confidence["mid"],
+                        "bpb_high": bpb_by_confidence["high"],
                     },
                     step=step,
                 )
+
+            # Write to log.jsonl
+            log_entry = {
+                "step": step,
+                "val_bpb": round(val_bpb, 6),
+                "probe_mean": round(probe_mean, 6),
+                "probe_variance": round(probe_variance, 6),
+                "probe_aux_loss": round(probe_aux_accum, 6),
+                "probe_acc_corr": round(probe_acc_corr, 6),
+                "bpb_by_confidence": {k: round(v, 6) if not math.isnan(v) else None
+                                      for k, v in bpb_by_confidence.items()},
+            }
+            with open("log.jsonl", "a") as log_f:
+                log_f.write(json.dumps(log_entry) + "\n")
 
             checkpoint = {
                 "model": raw_model.state_dict(),

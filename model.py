@@ -193,6 +193,7 @@ class LLMConfig:
     vocab_size: int = 50257
     n_experts: int = 8
     n_active_experts: int = 2
+    probe_every: int = 4  # insert a confidence probe after every N layers
 
     @property
     def n_layer(self):
@@ -219,6 +220,24 @@ class LLMConfig:
         return (raw + 63) // 64 * 64  # round up to multiple of 64
 
 
+class ConfidenceProbe(nn.Module):
+    """Lightweight MLP probe on the residual stream → scalar confidence in [0, 1].
+    Trained to predict whether the model's top-1 next-token prediction is correct."""
+
+    def __init__(self, n_embd: int, hidden: int = 64):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(n_embd, hidden, bias=False),
+            nn.GELU(),
+            nn.Linear(hidden, 1, bias=True),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        # x: (B, T, C) → (B, T)
+        return self.net(x).squeeze(-1)
+
+
 class LLM(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -232,6 +251,15 @@ class LLM(nn.Module):
         )
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.transformer.wte.weight = self.lm_head.weight
+
+        # Confidence probes: one after every probe_every layers
+        # e.g. depth=12, probe_every=4 → probes after layers 4, 8, 12
+        probe_positions = list(range(config.probe_every - 1, config.n_layer, config.probe_every))
+        self.probe_positions = probe_positions
+        self.probes = nn.ModuleList(
+            [ConfidenceProbe(config.n_embd) for _ in probe_positions]
+        )
+
         self.apply(self._init_weights)
 
     def _init_weights(self, module):
@@ -243,7 +271,7 @@ class LLM(nn.Module):
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
 
-    def forward(self, idx, targets=None):
+    def forward(self, idx, targets=None, return_probe_scores=False):
         B, T = idx.size()
         assert T <= self.config.block_size, (
             f"Cannot forward sequence of length {T}, block size is only {self.config.block_size}."
@@ -251,21 +279,52 @@ class LLM(nn.Module):
         tok_emb = self.transformer.wte(idx)
         x = tok_emb
         aux_loss = torch.tensor(0.0, device=idx.device)
-        for block in self.transformer.h:
+
+        # Collect probe outputs during the forward pass
+        probe_outputs = []  # list of (B, T) tensors
+        probe_idx = 0
+        for layer_idx, block in enumerate(self.transformer.h):
             x, block_aux = block(x)
             aux_loss = aux_loss + block_aux
+            if probe_idx < len(self.probe_positions) and layer_idx == self.probe_positions[probe_idx]:
+                probe_outputs.append(self.probes[probe_idx](x.detach()))  # detach: probe doesn't affect backbone grad
+                probe_idx += 1
+
         x = self.transformer.ln_f(x)
         logits = self.lm_head(x)
+
         loss = None
+        probe_aux_loss_val = torch.tensor(0.0, device=idx.device)
         if targets is not None:
             ce_loss = F.cross_entropy(
                 logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-100
             )
-            loss = (
-                ce_loss + 0.01 * aux_loss / self.config.n_layer
-                if self.training
-                else ce_loss
-            )
+
+            # Compute probe auxiliary loss: BCE against top-1 correctness
+            if probe_outputs:
+                with torch.no_grad():
+                    top1 = logits.argmax(dim=-1)  # (B, T)
+                    correct = (top1 == targets).float()  # (B, T)
+
+                probe_bce = torch.tensor(0.0, device=idx.device)
+                for p_scores in probe_outputs:
+                    probe_bce = probe_bce + F.binary_cross_entropy(
+                        p_scores, correct, reduction="mean"
+                    )
+                probe_aux_loss_val = probe_bce / len(probe_outputs)
+
+            moe_aux = 0.01 * aux_loss / self.config.n_layer if self.training else torch.tensor(0.0, device=idx.device)
+            probe_aux = 0.01 * probe_aux_loss_val if self.training else torch.tensor(0.0, device=idx.device)
+            loss = ce_loss + moe_aux + probe_aux
+
+        if return_probe_scores:
+            # Average across all probes → (B, T) mean confidence
+            if probe_outputs:
+                avg_probe = torch.stack(probe_outputs, dim=0).mean(dim=0)
+            else:
+                avg_probe = torch.zeros(B, T, device=idx.device)
+            return logits, loss, avg_probe, probe_aux_loss_val
+
         return logits, loss
 
     def generate(self, prompt, max_new_tokens=20, top_k=50, temperature=1.0, enc=None):
